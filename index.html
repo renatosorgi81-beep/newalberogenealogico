@@ -47,7 +47,7 @@
     .field input,.field select,.field textarea{border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:#fff}
 
     .canvas-wrap{position:relative;}
-    .canvas{position:absolute; inset:0}
+    .canvas{position:absolute; inset:0; pointer-events:none}
 
     /* Area di lavoro con scacchiera leggera e griglia (diversa) */
     .workspace{position:relative; height:100%; background:
@@ -197,7 +197,7 @@
       `;
 
       // Selezione
-      el.addEventListener('dblclick', ()=> select(p.id));
+      el.addEventListener('click', ()=> select(p.id));
 
       // Drag
       let drag=null;
@@ -335,13 +335,75 @@
 
     // Import/Export JSON (schema proprio)
     $('#fileInput').addEventListener('change', async (e)=>{
-      const file = e.target.files?.[0];
-      if(!file) return;
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if(!data.people||!data.edges) return alert('JSON non valido');
-      Object.assign(DB, data);
-      refresh();
+      try {
+        const file = e.target.files && e.target.files[0];
+        if(!file) return;
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        // Accettiamo 3 casi: 
+        // A) nostro schema completo {people:{}, edges:[], nextId?, sel?}
+        // B) array semplice di persone [{id?, name, birth, death, gender, x, y, photo}]
+        // C) oggetto con chiave "nodes" e "links" (schema generico)
+        let people = {};
+        let edges = [];
+
+        if (data && data.people && data.edges) {
+          // Caso A: nostro schema
+          people = data.people;
+          edges = data.edges;
+        } else if (Array.isArray(data)) {
+          // Caso B: array di persone
+          data.forEach((p, idx)=>{
+            const id = String(p.id ?? idx+1);
+            people[id] = {
+              id,
+              name: p.name || p.title || 'Senza nome',
+              birth: p.birth || p.born || '',
+              death: p.death || p.died || '',
+              gender: p.gender || p.sex || 'u',
+              x: Number.isFinite(p.x)? p.x : (100 + Math.random()*300),
+              y: Number.isFinite(p.y)? p.y : (100 + Math.random()*200),
+              photo: p.photo || p.image || ''
+            };
+          });
+          edges = [];
+        } else if (data && data.nodes && data.links) {
+          // Caso C: schema nodi/archi generico
+          data.nodes.forEach((p, idx)=>{
+            const id = String(p.id ?? idx+1);
+            people[id] = {
+              id,
+              name: p.name || 'Senza nome',
+              birth: p.birth || '',
+              death: p.death || '',
+              gender: p.gender || 'u',
+              x: Number.isFinite(p.x)? p.x : (100 + Math.random()*300),
+              y: Number.isFinite(p.y)? p.y : (100 + Math.random()*200),
+              photo: p.photo || ''
+            };
+          });
+          edges = (data.links||[]).map(l=> ({ a: String(l.source), b: String(l.target), type: l.type==='spouse'?'spouse':'parent' }));
+        } else {
+          alert('JSON non riconosciuto. Attesi: {people,edges} oppure [persone] oppure {nodes,links}.');
+          return;
+        }
+
+        // Sostituisci DB in modo sicuro
+        DB.people = people;
+        DB.edges = edges;
+        DB.sel = null;
+        // nextId = maxId+1
+        const maxId = Object.keys(DB.people).reduce((m, id)=> Math.max(m, Number(id)||0), 0);
+        DB.nextId = (maxId||0) + 1;
+
+        refresh();
+        updateStatus();
+        alert('Import completato');
+      } catch(err){
+        console.error(err);
+        alert('Errore durante l\'import: ' + (err.message||err));
+      }
     });
 
     $('#btnExport').onclick = ()=>{
