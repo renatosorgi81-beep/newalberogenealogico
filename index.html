@@ -119,7 +119,55 @@
     document.getElementById('btnAddSpouse').onclick=()=>{const id=DB.sel||addPerson();const sp=addPerson({name:'Partner'});link(id,sp,'spouse');};
     document.getElementById('btnDelete').onclick=()=>{if(!DB.sel)return;const id=DB.sel;delete DB.people[id];DB.edges=DB.edges.filter(e=>e.a!==id&&e.b!==id);DB.sel=null;refresh();};
 
-    document.getElementById('fileInput').addEventListener('change',async e=>{try{const file=e.target.files[0];if(!file)return;const text=await file.text();const data=JSON.parse(text);if(data.people&&data.edges){DB.people=data.people;DB.edges=data.edges;DB.nextId=data.nextId||1;}else{alert('Formato JSON non valido');return;}refresh();}catch(err){alert('Errore import: '+err);}});
+    document.getElementById('fileInput').addEventListener('change', async (e)=>{
+      try{
+        const file = e.target.files && e.target.files[0];
+        if(!file) return;
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        // Supporto formati:
+        // A) { people:{id:{...}}, edges:[{a,b,type}] }
+        // B) [ { id?, name, birth, death, gender, x, y, photo } ]
+        // C) { nodes:[...], links:[{source,target,type}] }
+        // D) { persons:[...], relations:[...] }
+        let people = {}; let edges = [];
+
+        if (data && data.people && data.edges) {
+          people = data.people; edges = data.edges;
+        } else if (Array.isArray(data)) {
+          data.forEach((p, idx)=>{
+            const id = String(p.id ?? idx+1);
+            people[id] = { id, name: p.name || p.title || 'Senza nome', birth: p.birth || p.born || '', death: p.death || p.died || '', gender: p.gender || p.sex || 'u', x: Number.isFinite(+p.x) ? +p.x : (100 + Math.random()*300), y: Number.isFinite(+p.y) ? +p.y : (100 + Math.random()*200), photo: p.photo || p.image || '' };
+          });
+          edges = [];
+        } else if (data && data.nodes && data.links) {
+          data.nodes.forEach((p, idx)=>{
+            const id = String(p.id ?? idx+1);
+            people[id] = { id, name: p.name || p.label || 'Senza nome', birth: p.birth || '', death: p.death || '', gender: p.gender || 'u', x: Number.isFinite(+p.x) ? +p.x : (100 + Math.random()*300), y: Number.isFinite(+p.y) ? +p.y : (100 + Math.random()*200), photo: p.photo || '' };
+          });
+          edges = (data.links||[]).map(l=>({ a:String(l.source), b:String(l.target), type:(l.type==='spouse'?'spouse':'parent') }));
+        } else if (data && data.persons) {
+          (data.persons||[]).forEach((p, idx)=>{
+            const id = String(p.id ?? idx+1);
+            people[id] = { id, name: p.name || 'Senza nome', birth: p.birth || '', death: p.death || '', gender: p.gender || 'u', x: Number.isFinite(+p.x) ? +p.x : (100 + Math.random()*300), y: Number.isFinite(+p.y) ? +p.y : (100 + Math.random()*200), photo: p.photo || '' };
+          });
+          edges = (data.relations||[]).map(r=>({ a:String(r.a||r.from), b:String(r.b||r.to), type:(r.type==='spouse'?'spouse':'parent') }));
+        } else {
+          alert('JSON non riconosciuto. Attesi: {people,edges} oppure [persone] oppure {nodes,links} oppure {persons,relations}.');
+          return;
+        }
+
+        DB.people = people; DB.edges = edges; DB.sel = null;
+        const maxId = Object.keys(DB.people).reduce((m,id)=> Math.max(m, Number(id)||0), 0);
+        DB.nextId = (maxId||0) + 1;
+        refresh(); updateStatus();
+        alert('Import completato');
+      } catch(err) {
+        console.error(err);
+        alert('Errore import: ' + (err.message||err));
+      }
+    });
 
     document.getElementById('btnExport').onclick=()=>{const data=JSON.stringify(DB,null,2);const blob=new Blob([data],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='albero.json';a.click();URL.revokeObjectURL(url);};
 
