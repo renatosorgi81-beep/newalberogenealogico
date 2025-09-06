@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GeneaMVP – Webapp Albero Genealogico</title>
+  <style>
+    :root{
+      --bg:#0b1020;--panel:#0f1630;--ink:#e9edf8;--muted:#b4c0e0;
+      --accent:#5aa9ff;--accent-2:#7bda91;--danger:#ff647c;--grid:#1a2348;
+      --node:#151f42;--node-border:#2b3a7a;--shadow:rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; display:grid; grid-template-columns:320px 1fr; background:var(--bg); color:var(--ink); font:14px/1.4 system-ui, Segoe UI, Roboto, Arial, sans-serif}
+    aside{border-right:1px solid #1b2352; background:var(--panel); padding:14px; overflow:auto}
+    h1{font-size:16px; margin:6px 0 12px; letter-spacing:.2px}
+    .small{color:var(--muted); font-size:12px}
+    label{display:block; margin:8px 0 4px}
+    input[type="text"], input[type="date"], select{width:100%; padding:8px; border:1px solid #2a3573; border-radius:10px; background:#0c1434; color:var(--ink)}
+    .row{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+    button{appearance:none; padding:8px 10px; border:1px solid #2a3573; border-radius:10px; background:#0c1434; color:var(--ink); cursor:pointer}
+    button.primary{background:linear-gradient(180deg, #1c2b71, #14245d); border-color:#2a3a8c}
+    button.ghost{background:transparent}
+    button.danger{background:#2a1330; border-color:#7a2a3a; color:#ffb0bd}
+    .btns{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+    .section{margin:14px 0; padding:10px; border:1px solid #1a275c; border-radius:12px; background:rgba(255,255,255,.02)}
+    .section h2{font-size:13px; margin:0 0 8px; color:var(--muted)}
+    .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+
+    /* Canvas area */
+    #stage-wrap{position:relative; overflow:hidden}
+    #stage{position:relative; height:100%; background:
+      linear-gradient(90deg, transparent 49px, var(--grid) 50px, transparent 51px),
+      linear-gradient(transparent 49px, var(--grid) 50px, transparent 51px);
+      background-size:100px 100px;}
+    #viewport{position:absolute; left:0; top:0; transform-origin:0 0;}
+
+    /* Node cards */
+    .person{position:absolute; width:180px; min-height:72px; border-radius:14px; border:1px solid var(--node-border); background:var(--node); box-shadow:0 8px 24px var(--shadow); padding:8px}
+    .person .name{font-weight:700; font-size:14px; margin:0 0 2px}
+    .person .meta{font-size:12px; color:var(--muted)}
+    .badge{display:inline-flex; gap:6px; align-items:center; padding:2px 6px; border-radius:999px; border:1px solid #34407e; background:#0e1a46; font-size:11px; color:#cfe0ff}
+    .photo{width:48px; height:48px; border-radius:10px; object-fit:cover; border:1px solid #2b3a7a; background:#0c1434}
+    .rowFlex{display:flex; gap:8px}
+
+    /* Relationship lines */
+    svg{position:absolute; left:0; top:0; pointer-events:none}
+    .edge{stroke:#7aa1ff; stroke-width:2}
+    .edge.adopt{stroke-dasharray:6 6}
+    .edge.spouse{stroke:#7bda91}
+
+    /* Toast */
+    .toast{position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#0d1a42; border:1px solid #31448f; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px var(--shadow);}
+  </style>
+</head>
+<body>
+  <aside>
+    <h1>GeneaMVP <span class="small">(alpha)</span></h1>
+
+    <div class="section">
+      <h2>Persona</h2>
+      <label>Nome e cognome</label>
+      <input id="iName" type="text" placeholder="Es. Maria Rossi" />
+      <div class="row">
+        <div>
+          <label>Genere</label>
+          <select id="iGender">
+            <option value="u">Non specificato</option>
+            <option value="f">Femmina</option>
+            <option value="m">Maschio</option>
+          </select>
+        </div>
+        <div>
+          <label>Anno nascita</label>
+          <input id="iBorn" type="text" placeholder="1981" />
+        </div>
+      </div>
+      <label>URL foto (opzionale)</label>
+      <input id="iPhoto" type="text" placeholder="https://…" />
+      <div class="btns">
+        <button class="primary" id="btnAdd">Aggiungi / Aggiorna</button>
+        <button class="ghost" id="btnClear">Pulisci form</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btnSetRoot">Imposta come radice</button>
+        <button id="btnDelete" class="danger">Elimina persona</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Relazioni</h2>
+      <div class="row">
+        <input id="iRelA" type="text" placeholder="ID A" />
+        <input id="iRelB" type="text" placeholder="ID B" />
+      </div>
+      <div class="btns">
+        <button id="btnSpouse">Collega come coniugi</button>
+        <button id="btnParent">Collega A = genitore di B</button>
+      </div>
+      <p class="small">Suggerimento: clicca un riquadro per caricarlo nel form. Gli ID compaiono sopra il nome.</p>
+    </div>
+
+    <div class="section">
+      <h2>Dati</h2>
+      <div class="btns">
+        <button id="btnExport">Esporta JSON</button>
+        <button id="btnImport">Importa JSON</button>
+        <button id="btnReset" class="danger">Nuovo albero</button>
+      </div>
+      <div class="btns" style="margin-top:6px">
+        <button id="btnPNG">Scarica PNG</button>
+        <button id="btnCenter">Centra & adatta</button>
+      </div>
+      <p class="small">Salvataggio automatico su <strong>LocalStorage</strong>.</p>
+    </div>
+
+    <div class="section">
+      <h2>Navigazione</h2>
+      <div class="toolbar">
+        <button id="zoomOut">−</button>
+        <span id="zoomLabel" class="badge">100%</span>
+        <button id="zoomIn">＋</button>
+        <button id="btnDrag" class="ghost">Trascina: <span id="dragState">OFF</span></button>
+      </div>
+    </div>
+
+    <p class="small">MVP open‑source scritto da zero per uso personale. Nessun codice da FamilyEcho è stato copiato.</p>
+  </aside>
+
+  <main id="stage-wrap">
+    <div id="stage">
+      <svg id="edges" width="4000" height="3000"></svg>
+      <div id="viewport"></div>
+    </div>
+  </main>
+
+  <div id="toast" class="toast" style="display:none"></div>
+
+  <script>
+  // ======= Stato =======
+  const state = {
+    people: /** @type {Record<string, Person>} */ ({}),
+    spouses: /** @type {[string,string][]} */ ([]),
+    rootId: null,
+    zoom: 1,
+    offset: {x: 100, y: 100},
+    dragging: false,
+    currentId: null,
+  };
+
+  /** @typedef {{id:string, name:string, gender:'m'|'f'|'u', born?:string, photo?:string, parents:string[], children:string[], x:number, y:number}} Person */
+
+  const el = sel => document.querySelector(sel);
+  const viewport = el('#viewport');
+  const edgesSVG = el('#edges');
+  const toast = el('#toast');
+
+  // ======= Utils =======
+  const rid = () => Math.random().toString(36).slice(2,9);
+  const clamp = (n,min,max)=>Math.max(min,Math.min(max,n));
+  function showToast(msg){ toast.textContent = msg; toast.style.display='block'; clearTimeout(showToast._t); showToast._t = setTimeout(()=>toast.style.display='none', 1800); }
+
+  function save(){ localStorage.setItem('genea.mvp', JSON.stringify({people:state.people, spouses:state.spouses, rootId:state.rootId, offset:state.offset, zoom:state.zoom})); }
+  function load(){
+    const raw = localStorage.getItem('genea.mvp');
+    if(!raw) return;
+    try{
+      const {people, spouses, rootId, offset, zoom} = JSON.parse(raw);
+      state.people = people||{}; state.spouses = spouses||[]; state.rootId = rootId||null; state.offset = offset||{x:100,y:100}; state.zoom = zoom||1;
+    }catch(e){ console.warn('Bad save'); }
+  }
+
+  // ======= Layout semplice per generazioni =======
+  function computeGenerations(){
+    if(!state.rootId || !state.people[state.rootId]) return new Map();
+    const gen = new Map([[state.rootId,0]]);
+    const q=[state.rootId];
+    while(q.length){
+      const a = q.shift();
+      const g = gen.get(a);
+      const P = state.people[a];
+      [...P.parents, ...P.children].forEach(n=>{
+        if(!gen.has(n)){ gen.set(n, (state.people[a].parents.includes(n)? g-1 : g+1)); q.push(n);}  
+      });
+      // sposi alla stessa generazione
+      state.spouses.forEach(([x,y])=>{
+        if(x===a && !gen.has(y)){ gen.set(y, g); q.push(y); }
+        if(y===a && !gen.has(x)){ gen.set(x, g); q.push(x); }
+      });
+    }
+    return gen;
+  }
+
+  function layout(){
+    const gen = computeGenerations();
+    // raggruppa per generazione
+    const groups = new Map();
+    for(const [id,g] of gen){ if(!groups.has(g)) groups.set(g, []); groups.get(g).push(id); }
+    // ordina e assegna posizioni
+    const dx=220, dy=140;
+    for(const [g,arr] of groups){
+      arr.sort((a,b)=> state.people[a].name.localeCompare(state.people[b].name));
+      arr.forEach((id,i)=>{
+        const p = state.people[id];
+        p.x = i*dx; p.y = (-g)*dy; // generazioni verso il basso
+      });
+    }
+    render(); save();
+  }
+
+  // ======= Render =======
+  function render(){
+    viewport.innerHTML='';
+    edgesSVG.innerHTML='';
+    const frag = document.createDocumentFragment();
+
+    // draw edges (parent -> child)
+    function line(x1,y1,x2,y2, cls='edge'){
+      const L = document.createElementNS('http://www.w3.org/2000/svg','line');
+      L.setAttribute('x1', x1+state.offset.x);
+      L.setAttribute('y1', y1+state.offset.y);
+      L.setAttribute('x2', x2+state.offset.x);
+      L.setAttribute('y2', y2+state.offset.y);
+      L.setAttribute('class', cls);
+      edgesSVG.appendChild(L);
+    }
+
+    // edges spouses (midpoint)
+    for(const [a,b] of state.spouses){
+      const A=state.people[a], B=state.people[b]; if(!A||!B) continue;
+      line(A.x+90, A.y+36, B.x+90, B.y+36, 'edge spouse');
+    }
+
+    // edges parents -> children
+    for(const id in state.people){
+      const p = state.people[id];
+      for(const c of p.children){
+        const child = state.people[c]; if(!child) continue;
+        line(p.x+90, p.y+72, child.x+90, child.y, 'edge');
+      }
+    }
+
+    // nodes
+    for(const id in state.people){
+      const p = state.people[id];
+      const card = document.createElement('div');
+      card.className='person';
+      card.style.left = (p.x + state.offset.x) + 'px';
+      card.style.top  = (p.y + state.offset.y) + 'px';
+      card.dataset.id = id;
+
+      const head = document.createElement('div');
+      head.className='rowFlex';
+      const ph = document.createElement('img'); ph.className='photo'; ph.src=p.photo||''; ph.alt='';
+      const txt = document.createElement('div');
+      const idBadge = document.createElement('div'); idBadge.className='badge'; idBadge.textContent = 'ID: '+id;
+      const nm = document.createElement('div'); nm.className='name'; nm.textContent=p.name||'(senzanome)';
+      const meta = document.createElement('div'); meta.className='meta'; meta.textContent = (p.gender==='m'?'♂':'')+(p.gender==='f'?'♀':'')+(p.gender==='u'?'⚪':'') + (p.born?(' · n. '+p.born):'');
+      txt.appendChild(idBadge); txt.appendChild(nm); txt.appendChild(meta);
+      head.appendChild(ph); head.appendChild(txt);
+      card.appendChild(head);
+
+      card.addEventListener('click', ev=>{
+        ev.stopPropagation();
+        state.currentId=id; fillForm(p); el('#iRelA').value=id; highlight(id);
+      });
+
+      frag.appendChild(card);
+    }
+
+    viewport.appendChild(frag);
+    el('#zoomLabel').textContent = Math.round(state.zoom*100)+'%';
+    el('#stage').style.transform = `scale(${state.zoom})`;
+  }
+
+  function highlight(id){
+    document.querySelectorAll('.person').forEach(n=>n.style.outline='none');
+    const card = document.querySelector(`.person[data-id="${id}"]`);
+    if(card) card.style.outline='2px solid var(--accent)';
+  }
+
+  // ======= CRUD =======
+  function upsertPerson({id, name, gender, born, photo}){
+    if(!id) id = rid();
+    const prev = state.people[id];
+    state.people[id] = {
+      id,
+      name: name || (prev?.name)||'',
+      gender: gender|| prev?.gender || 'u',
+      born: born || prev?.born || '',
+      photo: photo || prev?.photo || '',
+      parents: prev?.parents || [],
+      children: prev?.children || [],
+      x: prev?.x || 0, y: prev?.y || 0,
+    };
+    if(!state.rootId) state.rootId = id;
+    layout(); showToast(`Salvato: ${state.people[id].name} (ID ${id})`);
+    return id;
+  }
+
+  function deletePerson(id){
+    if(!state.people[id]) return;
+    // rimuovi da relazioni
+    for(const pid in state.people){
+      const p=state.people[pid];
+      p.parents = p.parents.filter(x=>x!==id);
+      p.children = p.children.filter(x=>x!==id);
+    }
+    state.spouses = state.spouses.filter(([a,b])=>a!==id && b!==id);
+    delete state.people[id];
+    if(state.rootId===id) state.rootId = Object.keys(state.people)[0]||null;
+    if(state.currentId===id) state.currentId=null;
+    render(); save();
+  }
+
+  function addSpouses(a,b){ if(a&&b&&a!==b){ if(!state.spouses.find(([x,y])=>(x===a&&y===b)||(x===b&&y===a))) state.spouses.push([a,b]); layout(); } }
+  function linkParentChild(parent, child){ if(parent && child && parent!==child){
+    const P=state.people[parent], C=state.people[child]; if(!P||!C) return;
+    if(!P.children.includes(child)) P.children.push(child);
+    if(!C.parents.includes(parent)) C.parents.push(parent);
+    layout();
+  }}
+
+  // ======= Form/UI =======
+  function fillForm(p){ el('#iName').value=p.name; el('#iGender').value=p.gender; el('#iBorn').value=p.born||''; el('#iPhoto').value=p.photo||''; }
+  function clearForm(){ el('#iName').value=''; el('#iBorn').value=''; el('#iPhoto').value=''; el('#iGender').value='u'; }
+
+  el('#btnAdd').addEventListener('click', ()=>{
+    const payload = { id: state.currentId, name: el('#iName').value.trim(), gender: el('#iGender').value, born: el('#iBorn').value.trim(), photo: el('#iPhoto').value.trim() };
+    const id = upsertPerson(payload); state.currentId=id; el('#iRelA').value=id;
+  });
+  el('#btnClear').addEventListener('click', ()=>{ state.currentId=null; clearForm();});
+  el('#btnDelete').addEventListener('click', ()=>{ if(state.currentId && confirm('Eliminare la persona selezionata?')) deletePerson(state.currentId); });
+  el('#btnSetRoot').addEventListener('click', ()=>{ if(state.currentId){ state.rootId=state.currentId; layout(); showToast('Impostata radice su '+state.people[state.rootId].name); }});
+
+  el('#btnSpouse').addEventListener('click', ()=>{ addSpouses(el('#iRelA').value.trim(), el('#iRelB').value.trim()); });
+  el('#btnParent').addEventListener('click', ()=>{ linkParentChild(el('#iRelA').value.trim(), el('#iRelB').value.trim()); });
+
+  // Import/Export
+  el('#btnExport').addEventListener('click', ()=>{
+    const data = { version:1, exportedAt:new Date().toISOString(), people:state.people, spouses:state.spouses, rootId:state.rootId };
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='genea-tree.json'; a.click(); URL.revokeObjectURL(a.href);
+  });
+  el('#btnImport').addEventListener('click', ()=>{
+    const inp = document.createElement('input'); inp.type='file'; inp.accept='.json,application/json'; inp.onchange = ()=>{
+      const f = inp.files[0]; if(!f) return; const rd=new FileReader(); rd.onload = ()=>{
+        try{ const data = JSON.parse(String(rd.result)); if(!data.people) throw new Error('formato non valido');
+          state.people = data.people; state.spouses = data.spouses||[]; state.rootId = data.rootId||Object.keys(state.people)[0]||null; layout(); showToast('Import completato'); }
+        catch(e){ alert('JSON non valido: '+e.message); }
+      }; rd.readAsText(f);
+    }; inp.click();
+  });
+  el('#btnReset').addEventListener('click', ()=>{ if(confirm('Sicuro? Verrà creato un nuovo albero vuoto.')){ state.people={}; state.spouses=[]; state.rootId=null; state.currentId=null; save(); render(); }});
+
+  // Pan & Zoom
+  function applyZoom(z){ state.zoom = clamp(z, .3, 2.2); el('#zoomLabel').textContent=Math.round(state.zoom*100)+'%'; el('#stage').style.transform=`scale(${state.zoom})`; save(); }
+  el('#zoomIn').addEventListener('click', ()=>applyZoom(state.zoom+0.1));
+  el('#zoomOut').addEventListener('click', ()=>applyZoom(state.zoom-0.1));
+  el('#btnCenter').addEventListener('click', ()=>{ state.offset={x:100,y:100}; applyZoom(1); render(); });
+  el('#btnDrag').addEventListener('click', ()=>{ state.dragging=!state.dragging; el('#dragState').textContent = state.dragging?'ON':'OFF'; });
+
+  let drag=false, dx=0, dy=0;
+  document.addEventListener('mousedown', (e)=>{ if(!state.dragging) return; drag=true; dx=e.clientX; dy=e.clientY; });
+  document.addEventListener('mousemove', (e)=>{ if(!drag) return; state.offset.x += (e.clientX-dx)/state.zoom; state.offset.y += (e.clientY-dy)/state.zoom; dx=e.clientX; dy=e.clientY; render(); });
+  document.addEventListener('mouseup', ()=> drag=false);
+
+  // PNG export (rasterizza DOM)
+  async function toPNG(){
+    const {width,height} = edgesSVG.getBoundingClientRect();
+    const canvas = document.createElement('canvas'); canvas.width=width; canvas.height=height; const ctx=canvas.getContext('2d');
+    // sfondo
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg'); ctx.fillRect(0,0,width,height);
+    // semplificazione: disegniamo solo nodi & linee con API manuali
+    // lines
+    ctx.strokeStyle = '#7aa1ff'; ctx.lineWidth=2;
+    document.querySelectorAll('line.edge').forEach(L=>{ ctx.beginPath(); ctx.moveTo(+L.getAttribute('x1'), +L.getAttribute('y1')); ctx.lineTo(+L.getAttribute('x2'), +L.getAttribute('y2')); ctx.stroke(); });
+    // nodes (rettangoli + nome)
+    document.querySelectorAll('.person').forEach(card=>{
+      const r = card.getBoundingClientRect(); const st = getComputedStyle(card);
+      const x = r.left - edgesSVG.getBoundingClientRect().left; const y = r.top - edgesSVG.getBoundingClientRect().top;
+      const w = r.width, h = r.height; const br = 14;
+      ctx.fillStyle = '#151f42'; ctx.strokeStyle = '#2b3a7a'; ctx.lineWidth=1; roundRect(ctx,x,y,w,h,br,true,true);
+      ctx.fillStyle = '#e9edf8'; ctx.font='700 14px system-ui'; ctx.fillText(card.querySelector('.name').textContent, x+10, y+22);
+      ctx.fillStyle = '#b4c0e0'; ctx.font='12px system-ui'; ctx.fillText(card.querySelector('.meta').textContent, x+10, y+40);
+    });
+    const link = document.createElement('a'); link.download='genea-tree.png'; link.href=canvas.toDataURL('image/png'); link.click();
+  }
+  function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+    if (typeof radius === 'number') { radius = {tl: radius, tr: radius, br: radius, bl: radius}; }
+    ctx.beginPath();
+    ctx.moveTo(x + radius.tl, y);
+    ctx.lineTo(x + width - radius.tr, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+    ctx.lineTo(x + width, y + height - radius.br);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+    ctx.lineTo(x + radius.bl, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+    ctx.lineTo(x, y + radius.tl);
+    ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+    ctx.closePath();
+    if (fill) ctx.fill();
+    if (stroke) ctx.stroke();
+  }
+  el('#btnPNG').addEventListener('click', toPNG);
+
+  // ======= Boot =======
+  load();
+  if(Object.keys(state.people).length===0){
+    // seed minimo
+    const a = upsertPerson({name:'Tu', gender:'u', born:'', photo:''});
+    state.currentId = a; el('#iRelA').value=a; highlight(a); save();
+  } else {
+    render();
+  }
+
+  </script>
+</body>
+</html>
