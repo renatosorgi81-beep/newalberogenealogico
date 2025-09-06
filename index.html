@@ -233,46 +233,68 @@
     }catch(e){ console.warn('Bad save'); }
   }
 
-  // ======= Layout con compattazione e centratura figli tra coniugi =======
-  function computeGenerations(){
-    if(!state.rootId || !state.people[state.rootId]) return new Map();
-    const gen = new Map([[state.rootId,0]]);
-    const q=[state.rootId];
-    while(q.length){
-      const a = q.shift();
-      const g = gen.get(a);
-      const P = state.people[a];
-      [...P.parents, ...P.children].forEach(n=>{
-        if(!gen.has(n)){ gen.set(n, (state.people[a].parents.includes(n)? g-1 : g+1)); q.push(n);}  
-      });
-      state.spouses.forEach(([x,y])=>{
-        if(x===a && !gen.has(y)){ gen.set(y, g); q.push(y); }
-        if(y===a && !gen.has(x)){ gen.set(x, g); q.push(x); }
-      });
-    }
-    return gen;
-  }
-
+  // ======= Layout gerarchico "tidy" con centratura coppie e figli =======
   function layout(){
-    const gen = computeGenerations();
-    const groups = new Map();
-    for(const [id,g] of gen){ if(!groups.has(g)) groups.set(g, []); groups.get(g).push(id); }
-    const dx=220, dy=150;
+    if(!state.rootId || !state.people[state.rootId]){ render(); save(); return; }
 
-    // compattazione per generazione (ordina per cognome + nome se disponibile)
-    for(const [g,arr] of groups){
-      arr.sort((a,b)=> state.people[a].name.localeCompare(state.people[b].name));
-      arr.forEach((id,i)=>{ const p = state.people[id]; p.x = i*dx; p.y = (-g)*dy; });
+    const dx = 220, dy = 160;
+
+    // 1) Costruisci struttura gerarchica a partire dalla radice
+    const visited = new Set();
+    function build(nodeId){
+      if(!state.people[nodeId] || visited.has(nodeId)) return null;
+      visited.add(nodeId);
+      const P = state.people[nodeId];
+
+      // partner principale (se più coniugi, prendi quello con più figli in comune)
+      let partner = null, maxKids = -1;
+      for(const [a,b] of state.spouses){
+        const other = (a===nodeId? b : b===nodeId? a : null); if(!other) continue;
+        const kids = Object.values(state.people).filter(c=> c.parents.includes(nodeId) && c.parents.includes(other));
+        if(kids.length>maxKids){ maxKids=kids.length; partner = other; }
+      }
+      const couple = partner? [nodeId, partner] : [nodeId];
+
+      // figli della coppia principale (se non partner, tutti i figli del nodo)
+      let children=[];
+      if(partner){
+        children = Object.values(state.people).filter(c=> c.parents.includes(nodeId) && c.parents.includes(partner)).map(c=>c.id);
+      } else {
+        children = [...P.children];
+      }
+
+      return { id: nodeId, couple, children: children.map(build).filter(Boolean) };
     }
 
-    // centratura figli tra coniugi: se una coppia ha figli, allinea i figli centrati rispetto al midpoint
-    for(const [a,b] of state.spouses){
-      const A=state.people[a], B=state.people[b]; if(!A||!B) continue;
-      const children = Object.values(state.people).filter(c=>c.parents.includes(a) && c.parents.includes(b));
-      if(children.length){
-        const midX = (A.x+B.x)/2; children.forEach((c,idx)=>{ c.x = midX + (idx-(children.length-1)/2)*200; c.y = Math.max(A.y,B.y)+150; });
+    const tree = build(state.rootId);
+
+    // 2) Assegnazione x con algoritmo tidy ricorsivo semplice
+    let nextX = 0;
+    function assign(node, depth){
+      node.depth = depth;
+      if(!node.children.length){
+        node.x = nextX; nextX += 1; // unità
+      } else {
+        node.children.forEach(ch=>assign(ch, depth+1));
+        node.x = (node.children[0].x + node.children[node.children.length-1].x)/2;
+      }
+      // posiziona persone della coppia sullo stesso x con piccolo offset
+      node.couple.forEach((pid,idx)=>{
+        const p = state.people[pid];
+        p.x = node.x*dx + (idx===0? -40 : +40);
+        p.y = depth*dy;
+      });
+      // posiziona anche eventuali partner aggiuntivi allineandoli alla stessa generazione accanto
+      for(const [a,b] of state.spouses){
+        if(node.couple.includes(a) && !node.couple.includes(b)){
+          const p = state.people[b]; if(p){ p.x = node.x*dx + 100; p.y = depth*dy; }
+        }
+        if(node.couple.includes(b) && !node.couple.includes(a)){
+          const p = state.people[a]; if(p){ p.x = node.x*dx - 100; p.y = depth*dy; }
+        }
       }
     }
+    if(tree) assign(tree, 0);
 
     render(); save();
   }
@@ -283,29 +305,33 @@
     edgesSVG.innerHTML='';
     const frag = document.createDocumentFragment();
 
-    function line(x1,y1,x2,y2, cls='edge'){
-      const L = document.createElementNS('http://www.w3.org/2000/svg','line');
-      L.setAttribute('x1', x1+state.offset.x);
-      L.setAttribute('y1', y1+state.offset.y);
-      L.setAttribute('x2', x2+state.offset.x);
-      L.setAttribute('y2', y2+state.offset.y);
-      L.setAttribute('class', cls);
-      edgesSVG.appendChild(L);
+    function pathCurve(x1,y1,x2,y2, cls='edge'){
+      const P = document.createElementNS('http://www.w3.org/2000/svg','path');
+      const mx = (y1 + y2)/2; // curva morbida verticale
+      const d = `M ${x1+state.offset.x} ${y1+state.offset.y} C ${x1+state.offset.x} ${mx+state.offset.y}, ${x2+state.offset.x} ${mx+state.offset.y}, ${x2+state.offset.x} ${y2+state.offset.y}`;
+      P.setAttribute('d', d); P.setAttribute('class', cls); P.setAttribute('fill','none');
+      edgesSVG.appendChild(P);
     }
 
-    // sposi
+    // sposi (linea orizzontale breve tra partner principali)
     for(const [a,b] of state.spouses){
       const A=state.people[a], B=state.people[b]; if(!A||!B) continue;
-      line(A.x+100, A.y+40, B.x+100, B.y+40, 'edge spouse');
+      const y = (A.y+B.y)/2 + 40; // allineamento
+      const x1 = A.x+100, x2 = B.x+80;
+      const L = document.createElementNS('http://www.w3.org/2000/svg','line');
+      L.setAttribute('x1', x1+state.offset.x); L.setAttribute('y1', y+state.offset.y);
+      L.setAttribute('x2', x2+state.offset.x); L.setAttribute('y2', y+state.offset.y);
+      L.setAttribute('class','edge spouse'); edgesSVG.appendChild(L);
     }
 
-    // genitori→figli
+    // genitori→figli (curve)
+    
     for(const id in state.people){
       const p = state.people[id];
       for(const c of p.children){
         const child = state.people[c]; if(!child) continue;
         const cls = state.adoptions.find(([pa,ch])=>pa===id && ch===c) ? 'edge adopt' : 'edge';
-        line(p.x+100, p.y+84, child.x+100, child.y, cls);
+        pathCurve(p.x+100, p.y+84, child.x+100, child.y, cls);
       }
     }
 
