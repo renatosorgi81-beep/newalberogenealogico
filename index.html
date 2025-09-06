@@ -66,6 +66,10 @@
 </head>
 <body>
   <aside>
+    <div id="modeBanner" style="display:none; margin-bottom:10px; padding:10px; border:1px solid #ffdede; background:#fff5f5; color:#8a1220; border-radius:10px;">
+      Sei in <strong>Visualizzazione (solo lettura)</strong>.
+      <button id="btnExitView" class="danger" style="margin-left:8px;">Passa a Modifica</button>
+    </div>
     <h1>GeneaMVP <span class="small">(Clear View)</span></h1>
 
     <div class="section">
@@ -245,7 +249,16 @@
   // ======= Utils =======
   const rid = () => Math.random().toString(36).slice(2,9);
   const clamp = (n,min,max)=>Math.max(min,Math.min(max,n));
-  function showToast(msg){ toast.textContent = msg; toast.style.display='block'; clearTimeout(showToast._t); showToast._t = setTimeout(()=>toast.style.display='none', 1800); }
+  function showToast(msg){ toast.textContent = msg; toast.style.display='block'; clearTimeout(showToast._t); showToast._t = setTimeout(()=>toast.style.display='none', 2200); }
+  function setReadOnlyMode(flag){
+    state.viewMode = !!flag;
+    const banner = el('#modeBanner');
+    if(banner){ banner.style.display = flag ? 'block' : 'none'; }
+    document.querySelectorAll('aside button, aside input, aside select, aside textarea').forEach(n=>{
+      if(['btnFE','btnFESelf','btnFETest','btnExitView'].includes(n.id)) { n.disabled=false; }
+      else n.disabled=!!flag;
+    });
+  }
 
   function snapshot(){ state.history.push(JSON.stringify({people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId, offset:state.offset, zoom:state.zoom, collapsed:state.collapsed, clarity:state.clarity})); if(state.history.length>50) state.history.shift(); state.future=[]; }
   function undo(){ if(!state.history.length) return; const last = state.history.pop(); state.future.push(JSON.stringify({people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId, offset:state.offset, zoom:state.zoom, collapsed:state.collapsed, clarity:state.clarity})); const s = JSON.parse(last); Object.assign(state, s); render(); save(); }
@@ -453,7 +466,17 @@
 
   // ======= Condivisione: URL sola lettura =======
   el('#btnShare').addEventListener('click', ()=>{ const data = {people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId}; const enc = btoa(unescape(encodeURIComponent(JSON.stringify(data)))); const url = location.origin + location.pathname + '#view=' + enc; navigator.clipboard.writeText(url).then(()=>showToast('Link copiato negli appunti (sola lettura)')); });
-  function tryViewFromHash(){ const m = location.hash.match(/#view=([A-Za-z0-9+/=]+)/); if(!m) return false; const json = decodeURIComponent(escape(atob(m[1]))); const data = JSON.parse(json); state.people = data.people||{}; state.spouses=data.spouses||[]; state.adoptions=data.adoptions||[]; state.rootId=data.rootId||null; render(); document.querySelectorAll('aside button, aside input, aside select, aside textarea').forEach(n=>{ if(n.id!=='btnFE' && n.id!=='btnFESelf' && n.id!=='btnFETest') n.disabled=true; }); showToast('Modalità sola lettura: comandi disattivati (FamilyEcho attivo)'); showToast('Modalità sola lettura: comandi disattivati (FamilyEcho attivo)'); showToast('Visualizzazione sola lettura'); return true; }
+  function tryViewFromHash(){
+    const m = location.hash.match(/#view=([A-Za-z0-9+/=]+)/);
+    if(!m) return false;
+    const json = decodeURIComponent(escape(atob(m[1])));
+    const data = JSON.parse(json);
+    state.people = data.people||{}; state.spouses=data.spouses||[]; state.adoptions=data.adoptions||[]; state.rootId=data.rootId||null;
+    render();
+    setReadOnlyMode(true);
+    showToast('Visualizzazione sola lettura');
+    return true;
+  }
 
   // ======= GEDCOM (supporto base) =======
   function buildGEDCOM(){
@@ -528,7 +551,8 @@
     const sample = [
       '0 HEAD','1 SOUR GeneaMVP','1 GEDC','2 VERS 5.5.1','1 CHAR UTF-8',
       '0 @I1@ INDI','1 NAME Test /Persona/','1 SEX U','0 TRLR'
-    ].join('\n');
+    ].join('
+');
 
     const params = { operation:'temp_view', format:'redirect', family: sample, hide_header:'1', hide_sidebar:'1', hide_navbar:'1', background_color:'ffffff', focus:'@I1@' };
     const form = document.createElement('form');
@@ -582,6 +606,10 @@
     if(Object.keys(state.people).length===0){ const a = upsertPerson({name:'Tu', gender:'u', born:'', photo:''}); state.currentId = a; el('#iRelA').value=a; highlight(a); save(); } else { render(); }
   }
 
+  // Banner: esci da sola lettura
+  const exitBtn = el('#btnExitView');
+  if(exitBtn){ exitBtn.addEventListener('click', ()=>{ history.replaceState(null,'', location.pathname); setReadOnlyMode(false); showToast('Modalità modifica attivata'); }); }
+
   // Visualizzazione & Ricerca controlli
   el('#btnSimple').addEventListener('click', ()=>{ state.simpleMode = !state.simpleMode; el('#simpleState').textContent = state.simpleMode?'ON':'OFF'; render(); save(); });
   el('#iDepth').addEventListener('change', ()=>{ state.clarity.depthMax = Math.max(1, Math.min(12, +el('#iDepth').value||4)); layout(); save(); });
@@ -600,6 +628,8 @@
   el('#btnEn').addEventListener('click', ()=>showToast('Language EN (labels not translated yet)'));
   el('#btnTheme').addEventListener('click', ()=>{ if(state.theme==='light'){ document.documentElement.style.setProperty('--bg','#0b1020'); document.documentElement.style.setProperty('--panel','#0f1630'); document.documentElement.style.setProperty('--ink','#e9edf8'); document.documentElement.style.setProperty('--muted','#b4c0e0'); document.documentElement.style.setProperty('--grid','#1a2348'); document.documentElement.style.setProperty('--node','#151f42'); document.documentElement.style.setProperty('--node-border','#2b3a7a'); state.theme='dark'; } else { location.reload(); state.theme='light'; } save(); });
 
+  // Diagnostica errori JS a schermo
+  window.addEventListener('error', (e)=>{ console.error('JS error:', e.message); showToast('Errore JS: '+ e.message); });
   </script>
 </body>
 </html>
