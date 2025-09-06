@@ -74,7 +74,9 @@
     </section>
   </main>
   <script>
-    const DB={people:{},edges:[],sel:null,nextId:1};
+    // ===== Stato =====
+    const DB={people:{},edges:[],sel:null,nextId:1,lockedLayout:true};
+
     const ws=document.getElementById('workspace');
     const canvas=document.getElementById('edges');
     const ctx=canvas.getContext('2d');
@@ -82,11 +84,14 @@
     function resize(){canvas.width=ws.clientWidth;canvas.height=ws.clientHeight;drawEdges();}
     new ResizeObserver(resize).observe(ws);
 
-    function newId(){return String(DB.nextId++);}
+    // ===== Helpers =====
+    function newId(){return String(DB.nextId++);}    
+    function rectCenter(p){return{x:(p.x||0)+100,y:(p.y||0)+40};}
 
+    // ===== CRUD Persone =====
     function addPerson(p={}){
       const id=newId();
-      DB.people[id]={id,name:'Persona',gender:'u',x:100,y:100,...p};
+      DB.people[id]={id,name:'Persona',gender:'u',x:100,y:100,parents:[],...p};
       refresh();return id;
     }
 
@@ -96,82 +101,168 @@
       el.dataset.id=p.id;
       el.style.left=(p.x||0)+'px';
       el.style.top=(p.y||0)+'px';
-      el.innerHTML=`<div class="photo">${p.photo?`<img src="${p.photo}" width="50" height="50"/>`:''}</div><div class="title">${p.name}</div><div class="meta">${p.birth||''}${p.death?` - ${p.death}`:''}</div>`;
+      el.innerHTML=`<div class="photo">${p.photo?`<img src="${p.photo}" width="50" height="50"/>`:''}</div><div class="title">${p.name||'Senza nome'}</div><div class="meta">${p.birth||''}${p.death?` - ${p.death}`:''}</div>`;
       el.onclick=()=>select(p.id);
       ws.appendChild(el);
     }
-
-    function refresh(){ws.innerHTML='';for(const id in DB.people)mountPerson(DB.people[id]);drawEdges();updateStatus();}
-
-    function rectCenter(p){return{x:(p.x||0)+100,y:(p.y||0)+40};}
-
-    function drawEdges(){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='black';ctx.lineWidth=1.2;for(const e of DB.edges){const A=DB.people[e.a],B=DB.people[e.b];if(!A||!B)continue;const a=rectCenter(A),b=rectCenter(B);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}}
-
-    function link(a,b,type){DB.edges.push({a,b,type});refresh();}
 
     function select(id){DB.sel=id;const p=DB.people[id];document.getElementById('pName').value=p.name||'';document.getElementById('pBirth').value=p.birth||'';document.getElementById('pDeath').value=p.death||'';document.getElementById('pGender').value=p.gender||'u';document.getElementById('pPhoto').value=p.photo||'';}
 
     function updateStatus(){document.getElementById('status').textContent=`Nodi: ${Object.keys(DB.people).length} · Relazioni: ${DB.edges.length}`;}
 
-    document.getElementById('btnApply').onclick=()=>{if(!DB.sel)return;const p=DB.people[DB.sel];p.name=document.getElementById('pName').value;p.birth=document.getElementById('pBirth').value;p.death=document.getElementById('pDeath').value;p.gender=document.getElementById('pGender').value;p.photo=document.getElementById('pPhoto').value;refresh();};
-    document.getElementById('btnAddParent').onclick=()=>{const id=DB.sel||addPerson();const par=addPerson({name:'Genitore'});link(par,id,'parent');};
-    document.getElementById('btnAddChild').onclick=()=>{const id=DB.sel||addPerson();const ch=addPerson({name:'Figlio'});link(id,ch,'parent');};
-    document.getElementById('btnAddSpouse').onclick=()=>{const id=DB.sel||addPerson();const sp=addPerson({name:'Partner'});link(id,sp,'spouse');};
-    document.getElementById('btnDelete').onclick=()=>{if(!DB.sel)return;const id=DB.sel;delete DB.people[id];DB.edges=DB.edges.filter(e=>e.a!==id&&e.b!==id);DB.sel=null;refresh();};
+    // ===== Layout =====
+    function calcNextId(people){
+      const maxId = Object.keys(people||{}).reduce((m,id)=> Math.max(m, +id||0), 0);
+      return (maxId||0) + 1;
+    }
+    function buildEdgesFromParents(people){
+      const edges=[]; if(!people) return edges;
+      for(const id in people){
+        const p=people[id];
+        if(Array.isArray(p.parents)){
+          p.parents.forEach(pr=> edges.push({a:String(pr), b:String(id), type:'parent'}));
+        }
+      }
+      return edges;
+    }
+    function autoLayout(){
+      const nodes=DB.people; if(!nodes) return;
+      const roots = Object.keys(nodes).filter(id=> !(nodes[id]?.parents && nodes[id].parents.length));
+      const level = {}; const queue=[...roots]; roots.forEach(r=> level[r]=0);
+      while(queue.length){
+        const cur=queue.shift();
+        for(const id in nodes){
+          const parents=(nodes[id]?.parents||[]).map(String);
+          if(parents.includes(String(cur))){
+            const nl=(level[cur]||0)+1;
+            if(!(id in level) || nl<level[id]){ level[id]=nl; queue.push(id); }
+          }
+        }
+      }
+      for(const id in nodes) if(!(id in level)) level[id]=0;
+      const yStep=140, xStep=240; const groups={};
+      for(const id in level){ const l=level[id]; (groups[l]=groups[l]||[]).push(id); }
+      Object.keys(groups).forEach(l=>{
+        const arr=groups[l]; arr.sort((a,b)=> a.localeCompare(b));
+        arr.forEach((id,i)=>{ nodes[id].x=120+i*xStep; nodes[id].y=60+ (+l)*yStep; });
+      });
+    }
 
+    // ===== Render =====
+    function refresh(){
+      ws.innerHTML='';
+      if(DB.lockedLayout) autoLayout();
+      for(const id in DB.people) mountPerson(DB.people[id]);
+      drawEdges();
+      updateStatus();
+    }
+
+    function drawEdges(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.strokeStyle='black';
+      ctx.lineWidth=1.2;
+      for(const e of DB.edges){
+        const A=DB.people[e.a], B=DB.people[e.b];
+        if(!A||!B) continue;
+        const a=rectCenter(A), b=rectCenter(B);
+        // linee ortogonali (gomito): orizzontale poi verticale
+        const midX=(a.x+b.x)/2;
+        ctx.beginPath();
+        ctx.moveTo(a.x,a.y);
+        ctx.lineTo(midX,a.y);
+        ctx.lineTo(midX,b.y);
+        ctx.lineTo(b.x,b.y);
+        ctx.stroke();
+      }
+    }
+
+    // ===== Toolbar Azioni =====
+    document.getElementById('btnApply').onclick=()=>{
+      if(!DB.sel) return; const p=DB.people[DB.sel];
+      p.name=document.getElementById('pName').value; p.birth=document.getElementById('pBirth').value; p.death=document.getElementById('pDeath').value; p.gender=document.getElementById('pGender').value; p.photo=document.getElementById('pPhoto').value; refresh();
+    };
+
+    document.getElementById('btnAddParent').onclick=()=>{
+      if(!DB.sel) return; const child=DB.sel; const par=addPerson({name:'Genitore'});
+      DB.edges.push({a:par,b:child,type:'parent'});
+      DB.people[child].parents = Array.from(new Set([...(DB.people[child].parents||[]), par]));
+      refresh();
+    };
+
+    document.getElementById('btnAddChild').onclick=()=>{
+      if(!DB.sel) return; const par=DB.sel; const ch=addPerson({name:'Figlio'});
+      DB.edges.push({a:par,b:ch,type:'parent'});
+      DB.people[ch].parents = Array.from(new Set([...(DB.people[ch].parents||[]), par]));
+      refresh();
+    };
+
+    document.getElementById('btnAddSpouse').onclick=()=>{
+      if(!DB.sel) return; const sp=addPerson({name:'Partner'});
+      DB.edges.push({a:DB.sel,b:sp,type:'spouse'});
+      refresh();
+    };
+
+    document.getElementById('btnDelete').onclick=()=>{
+      if(!DB.sel) return; const id=DB.sel; delete DB.people[id];
+      DB.edges = DB.edges.filter(e=> e.a!==id && e.b!==id);
+      for(const pid in DB.people){
+        const pp=DB.people[pid]; if(Array.isArray(pp.parents)) pp.parents = pp.parents.filter(x=> String(x)!==String(id));
+      }
+      DB.sel=null; refresh();
+    };
+
+    // ===== Import/Export =====
     document.getElementById('fileInput').addEventListener('change', async (e)=>{
       try{
-        const file = e.target.files && e.target.files[0];
-        if(!file) return;
-        const text = await file.text();
-        const data = JSON.parse(text);
+        const file=e.target.files && e.target.files[0];
+        if(!file) return; const text=await file.text(); const data=JSON.parse(text);
+        let people={}, edges=[];
 
-        // Supporto formati:
-        // A) { people:{id:{...}}, edges:[{a,b,type}] }
-        // B) [ { id?, name, birth, death, gender, x, y, photo } ]
-        // C) { nodes:[...], links:[{source,target,type}] }
-        // D) { persons:[...], relations:[...] }
-        let people = {}; let edges = [];
-
-        if (data && data.people && data.edges) {
-          people = data.people; edges = data.edges;
-        } else if (Array.isArray(data)) {
-          data.forEach((p, idx)=>{
-            const id = String(p.id ?? idx+1);
-            people[id] = { id, name: p.name || p.title || 'Senza nome', birth: p.birth || p.born || '', death: p.death || p.died || '', gender: p.gender || p.sex || 'u', x: Number.isFinite(+p.x) ? +p.x : (100 + Math.random()*300), y: Number.isFinite(+p.y) ? +p.y : (100 + Math.random()*200), photo: p.photo || p.image || '' };
+        if (data && data.people){
+          // tuo schema: {people:{ id:{..., parents:[...] }}, order?, nextId?}
+          people = data.people;
+          edges  = buildEdgesFromParents(people);
+          DB.nextId = data.nextId || calcNextId(people);
+        } else if (data && data.nodes && data.links){
+          data.nodes.forEach((p,idx)=>{
+            const id=String(p.id ?? idx+1);
+            people[id]={id, name:p.name||p.label||'Senza nome', x:+p.x||0, y:+p.y||0, photo:p.photo||'', parents: p.parents||[]};
           });
-          edges = [];
-        } else if (data && data.nodes && data.links) {
-          data.nodes.forEach((p, idx)=>{
-            const id = String(p.id ?? idx+1);
-            people[id] = { id, name: p.name || p.label || 'Senza nome', birth: p.birth || '', death: p.death || '', gender: p.gender || 'u', x: Number.isFinite(+p.x) ? +p.x : (100 + Math.random()*300), y: Number.isFinite(+p.y) ? +p.y : (100 + Math.random()*200), photo: p.photo || '' };
+          edges=(data.links||[]).map(l=>({a:String(l.source), b:String(l.target), type:(l.type==='spouse'?'spouse':'parent')}));
+        } else if (Array.isArray(data)){
+          data.forEach((p,idx)=>{
+            const id=String(p.id ?? idx+1);
+            people[id]={id, name:p.name||p.title||'Senza nome', x:+p.x||0, y:+p.y||0, photo:p.photo||p.image||'', parents: p.parents||[]};
+            if(Array.isArray(p.parents)) p.parents.forEach(pr=> edges.push({a:String(pr), b:id, type:'parent'}));
           });
-          edges = (data.links||[]).map(l=>({ a:String(l.source), b:String(l.target), type:(l.type==='spouse'?'spouse':'parent') }));
-        } else if (data && data.persons) {
-          (data.persons||[]).forEach((p, idx)=>{
-            const id = String(p.id ?? idx+1);
-            people[id] = { id, name: p.name || 'Senza nome', birth: p.birth || '', death: p.death || '', gender: p.gender || 'u', x: Number.isFinite(+p.x) ? +p.x : (100 + Math.random()*300), y: Number.isFinite(+p.y) ? +p.y : (100 + Math.random()*200), photo: p.photo || '' };
+        } else if (data && data.persons){
+          data.persons.forEach((p,idx)=>{
+            const id=String(p.id ?? idx+1);
+            people[id]={id, name:p.name||'Senza nome', x:+p.x||0, y:+p.y||0, photo:p.photo||'', parents: p.parents||[]};
           });
-          edges = (data.relations||[]).map(r=>({ a:String(r.a||r.from), b:String(r.b||r.to), type:(r.type==='spouse'?'spouse':'parent') }));
+          edges=(data.relations||[]).map(r=>({a:String(r.a||r.from), b:String(r.b||r.to), type:(r.type==='spouse'?'spouse':'parent')}));
         } else {
-          alert('JSON non riconosciuto. Attesi: {people,edges} oppure [persone] oppure {nodes,links} oppure {persons,relations}.');
+          alert('JSON non riconosciuto. Attesi: {people} (con parents) / [persone] / {nodes,links} / {persons,relations}.');
           return;
         }
 
-        DB.people = people; DB.edges = edges; DB.sel = null;
-        const maxId = Object.keys(DB.people).reduce((m,id)=> Math.max(m, Number(id)||0), 0);
-        DB.nextId = (maxId||0) + 1;
+        DB.people=people; DB.edges=edges; DB.sel=null;
         refresh(); updateStatus();
         alert('Import completato');
-      } catch(err) {
-        console.error(err);
-        alert('Errore import: ' + (err.message||err));
-      }
+      }catch(err){ console.error(err); alert('Errore import: '+(err.message||err)); }
     });
 
-    document.getElementById('btnExport').onclick=()=>{const data=JSON.stringify(DB,null,2);const blob=new Blob([data],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='albero.json';a.click();URL.revokeObjectURL(url);};
+    document.getElementById('btnExport').onclick=()=>{
+      const data = { people: DB.people, edges: DB.edges, nextId: DB.nextId };
+      const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob); const a=document.createElement('a');
+      a.href=url; a.download='albero.json'; a.click(); URL.revokeObjectURL(url);
+    };
 
-    addPerson({name:'Nonno',x:200,y:60});addPerson({name:'Nonna',x:500,y:60});refresh();
+    // ===== Seed demo minimo =====
+    addPerson({name:'Nonno',x:200,y:60});
+    addPerson({name:'Nonna',x:500,y:60});
+    refresh();
     resize();
   </script>
 </body>
