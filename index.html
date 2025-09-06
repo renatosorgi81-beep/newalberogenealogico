@@ -5,429 +5,125 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>GeneaView – Albero genealogico (UI originale)</title>
   <style>
-    /*
-      UI ORIGINALE (no copia):
-      - Palette diversa
-      - Nomi classi/struttura CSS diverse
-      - Layout ispirato ma non sostanzialmente simile
-      - Icone via SVG proprietarie
-    */
-
     :root{
-      --bg:#fbfaf9;           /* diverso */
-      --panel:#ffffff;        /* diverso */
-      --ink:#2e2a27;          /* diverso */
-      --muted:#7b6f67;        /* diverso */
-      --accent:#2b6be3;       /* diverso */
-      --accent-weak:#e7efff;  /* diverso */
-      --line:#cfc7c2;         /* diverso */
-      --node:#f0ebe7;         /* diverso */
-      --node-border:#9b877b;  /* diverso */
+      --bg:#fbfaf9;
+      --panel:#ffffff;
+      --ink:#2e2a27;
+      --muted:#7b6f67;
+      --accent:#2b6be3;
+      --line:#cfc7c2;
+      --node:#f0ebe7;
+      --node-border:#9b877b;
       --shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.06);
     }
-
     *{box-sizing:border-box}
     html,body{height:100%}
     body{margin:0; background:var(--bg); color:var(--ink); font:14px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;}
-
     .topbar{display:flex; align-items:center; gap:10px; height:52px; padding:0 16px; border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:10}
-    .brand{font-weight:700; letter-spacing:.2px}
+    .brand{font-weight:700}
     .toolbar{margin-left:auto; display:flex; gap:8px}
     .btn{border:1px solid var(--line); background:#fff; height:34px; padding:0 10px; border-radius:10px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; box-shadow:var(--shadow)}
-    .btn:hover{background:var(--accent-weak)}
-    .btn svg{width:16px; height:16px}
-
+    .btn:hover{background:#f6f6f6}
     .layout{display:grid; grid-template-columns: 320px 1fr; height:calc(100% - 52px)}
-
     .sidebar{border-right:1px solid var(--line); padding:12px; background:var(--panel); overflow:auto}
     .section{margin-bottom:16px}
-    .section h3{margin:0 0 8px 0; font-size:13px; color:var(--muted); letter-spacing:.3px; text-transform:uppercase}
+    .section h3{margin:0 0 8px 0; font-size:13px; color:var(--muted); text-transform:uppercase}
     .field{display:flex; flex-direction:column; gap:6px; margin-bottom:10px}
     .field label{font-size:12px; color:var(--muted)}
-    .field input,.field select,.field textarea{border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:#fff}
-
-    .canvas-wrap{position:relative;}
-    .canvas{position:absolute; inset:0; pointer-events:none}
-
-    /* Area di lavoro con scacchiera leggera e griglia (diversa) */
-    .workspace{position:relative; height:100%; background:
-      linear-gradient(90deg, rgba(0,0,0,.04) 1px, transparent 1px),
-      linear-gradient(180deg, rgba(0,0,0,.04) 1px, transparent 1px),
-      repeating-linear-gradient(45deg, rgba(43,107,227,.035) 0 10px, transparent 10px 20px);
-      background-size: 40px 40px, 40px 40px, 20px 20px;
-      background-position: 0 0, 0 0, 0 0;
-    }
-
-    /* Nodo persona – stile diverso, proporzioni diverse */
-    .node{position:absolute; width:230px; min-height:96px; padding:10px; border:1px solid var(--node-border); background:var(--node); border-radius:14px; box-shadow:var(--shadow)}
-    .node .title{font-weight:700; margin-bottom:2px}
+    .field input,.field select{border:1px solid var(--line); border-radius:8px; padding:6px 8px; background:#fff}
+    .canvas-wrap{position:relative; overflow:auto}
+    .workspace{position:relative; height:100%; padding:40px;}
+    .node{position:absolute; width:200px; min-height:80px; padding:8px; border:1px solid var(--node-border); background:var(--node); border-radius:10px; box-shadow:var(--shadow); text-align:center}
+    .node .title{font-weight:700; margin-bottom:4px}
     .node .meta{font-size:12px; color:var(--muted)}
-    .node .photo{width:60px; height:60px; border-radius:10px; background:#fff; border:1px solid var(--line); overflow:hidden}
-
-    .row{display:flex; gap:10px}
-    .grow{flex:1}
-
-    /* Linee relazione – canvas (CanvasRenderingContext2D), quindi nessuna copia CSS */
-
-    /* Tooltip semplice */
-    .tip{position:absolute; transform:translate(-50%,-120%); background:#111; color:#fff; font-size:12px; padding:6px 8px; border-radius:8px; pointer-events:none; opacity:0; transition:.15s}
-    .node:hover .tip{opacity:1}
-
-    @media (max-width: 860px){
-      .layout{grid-template-columns:1fr}
-      .sidebar{height:260px}
-      .canvas-wrap{height:calc(100% - 260px)}
-    }
+    .node .photo{width:50px; height:50px; border-radius:6px; background:#fff; border:1px solid var(--line); margin:0 auto 6px; overflow:hidden}
+    canvas{position:absolute; inset:0; pointer-events:none}
   </style>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">GeneaView</div>
     <div class="toolbar">
-      <button class="btn" id="btnZoomIn" title="Zoom +" aria-label="Zoom +">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M11 8v6M8 11h6"/></svg>
-        <span>Zoom</span>
-      </button>
-      <button class="btn" id="btnZoomOut" title="Zoom −" aria-label="Zoom −">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M8 11h6"/></svg>
-        <span>−</span>
-      </button>
-      <button class="btn" id="btnCenter" title="Centra" aria-label="Centra">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="3"/></svg>
-        <span>Centra</span>
-      </button>
-      <label class="btn" title="Importa JSON" aria-label="Importa JSON">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
-        <input id="fileInput" type="file" accept="application/json" hidden />
-        <span>Importa</span>
-      </label>
-      <button class="btn" id="btnExport" title="Esporta JSON" aria-label="Esporta JSON">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V9"/><path d="M17 14l-5-5-5 5"/><path d="M5 3h14"/></svg>
-        <span>Esporta</span>
-      </button>
+      <button class="btn" id="btnExport">Esporta JSON</button>
+      <label class="btn">Importa JSON<input id="fileInput" type="file" accept="application/json" hidden /></label>
     </div>
   </header>
-
   <main class="layout">
-    <aside class="sidebar" aria-label="Dettagli persona">
+    <aside class="sidebar">
       <div class="section">
         <h3>Persona</h3>
-        <div class="field"><label>Nome</label><input id="pName" placeholder="Mario Rossi" /></div>
-        <div class="field"><label>Anno nascita</label><input id="pBirth" inputmode="numeric" /></div>
-        <div class="field"><label>Anno morte</label><input id="pDeath" inputmode="numeric" /></div>
-        <div class="field"><label>Sesso</label>
-          <select id="pGender">
-            <option value="u">Non specificato</option>
-            <option value="m">Maschio</option>
-            <option value="f">Femmina</option>
-          </select>
-        </div>
-        <div class="field"><label>Foto (URL)</label><input id="pPhoto" placeholder="https://..." /></div>
+        <div class="field"><label>Nome</label><input id="pName" /></div>
+        <div class="field"><label>Anno nascita</label><input id="pBirth" /></div>
+        <div class="field"><label>Anno morte</label><input id="pDeath" /></div>
+        <div class="field"><label>Sesso</label><select id="pGender"><option value="u">N/D</option><option value="m">M</option><option value="f">F</option></select></div>
+        <div class="field"><label>Foto (URL)</label><input id="pPhoto" /></div>
         <div class="field"><button class="btn" id="btnApply">Applica</button></div>
       </div>
-
       <div class="section">
         <h3>Azioni</h3>
-        <div class="row">
-          <button class="btn" id="btnAddParent">Aggiungi genitore</button>
-          <button class="btn" id="btnAddChild">Aggiungi figlio</button>
-        </div>
-        <div class="row" style="margin-top:8px">
-          <button class="btn" id="btnAddSpouse">Aggiungi partner</button>
-          <button class="btn" id="btnDelete">Elimina</button>
-        </div>
+        <button class="btn" id="btnAddParent">Aggiungi genitore</button>
+        <button class="btn" id="btnAddChild">Aggiungi figlio</button>
+        <button class="btn" id="btnAddSpouse">Aggiungi partner</button>
+        <button class="btn" id="btnDelete">Elimina</button>
       </div>
-
-      <div class="section">
-        <h3>Stato</h3>
-        <div id="status" style="font-size:12px; color:var(--muted)">Nodi: 0 · Relazioni: 0</div>
-      </div>
+      <div class="section"><h3>Stato</h3><div id="status">Nodi: 0 · Relazioni: 0</div></div>
     </aside>
-
     <section class="canvas-wrap">
       <div class="workspace" id="workspace"></div>
-      <canvas id="edges" class="canvas" aria-hidden="true"></canvas>
+      <canvas id="edges"></canvas>
     </section>
   </main>
-
   <script>
-    // Modello Dati ORIGINALE (non copiato):
-    // - Struttura diversa da qualsiasi software proprietario
-    const DB = {
-      people: {},    // id -> { id, name, birth, death, gender, photo, x, y }
-      edges: [],     // { a, b, type: 'parent'|'spouse' }
-      sel: null,
-      nextId: 1,
-      zoom: 1,
-      pan: {x: 0, y: 0},
-    };
+    const DB={people:{},edges:[],sel:null,nextId:1};
+    const ws=document.getElementById('workspace');
+    const canvas=document.getElementById('edges');
+    const ctx=canvas.getContext('2d');
 
-    const ws = document.getElementById('workspace');
-    const canvas = document.getElementById('edges');
-    const ctx = canvas.getContext('2d');
-
-    function resize(){
-      canvas.width = ws.clientWidth;
-      canvas.height = ws.clientHeight;
-      drawEdges();
-    }
+    function resize(){canvas.width=ws.clientWidth;canvas.height=ws.clientHeight;drawEdges();}
     new ResizeObserver(resize).observe(ws);
 
-    // Helpers
-    const $ = sel => document.querySelector(sel);
-    function newId(){ return String(DB.nextId++); }
+    function newId(){return String(DB.nextId++);}
 
-    // Crea un nodo persona
-    function makePerson(p){
-      const el = document.createElement('div');
-      el.className = 'node';
-      el.tabIndex = 0;
-      el.dataset.id = p.id;
-      el.style.left = (p.x||0) + 'px';
-      el.style.top  = (p.y||0) + 'px';
-      el.innerHTML = `
-        <div class="row">
-          <div class="photo" aria-hidden="true">${p.photo ? `<img src="${p.photo}" alt="" width="60" height="60"/>` : ''}</div>
-          <div class="grow">
-            <div class="title">${p.name||'Senza nome'}</div>
-            <div class="meta">${p.birth||''}${p.death?` – ${p.death}`:''}</div>
-          </div>
-        </div>
-        <div class="tip">Doppio click per selezionare</div>
-      `;
-
-      // Selezione
-      el.addEventListener('click', ()=> select(p.id));
-
-      // Drag
-      let drag=null;
-      el.addEventListener('pointerdown', e=>{
-        drag = {dx:e.clientX - el.offsetLeft, dy:e.clientY - el.offsetTop};
-        el.setPointerCapture(e.pointerId);
-      });
-      el.addEventListener('pointermove', e=>{
-        if(!drag) return;
-        const x = e.clientX - drag.dx;
-        const y = e.clientY - drag.dy;
-        el.style.left = x+'px';
-        el.style.top = y+'px';
-        const id = el.dataset.id;
-        DB.people[id].x = x; DB.people[id].y = y;
-        drawEdges();
-      });
-      el.addEventListener('pointerup', ()=> drag=null);
-
-      return el;
+    function addPerson(p={}){
+      const id=newId();
+      DB.people[id]={id,name:'Persona',gender:'u',x:100,y:100,...p};
+      refresh();return id;
     }
 
     function mountPerson(p){
-      const el = makePerson(p);
+      const el=document.createElement('div');
+      el.className='node';
+      el.dataset.id=p.id;
+      el.style.left=(p.x||0)+'px';
+      el.style.top=(p.y||0)+'px';
+      el.innerHTML=`<div class="photo">${p.photo?`<img src="${p.photo}" width="50" height="50"/>`:''}</div><div class="title">${p.name}</div><div class="meta">${p.birth||''}${p.death?` - ${p.death}`:''}</div>`;
+      el.onclick=()=>select(p.id);
       ws.appendChild(el);
     }
 
-    function refresh(){
-      ws.innerHTML = '';
-      for(const id in DB.people) mountPerson(DB.people[id]);
-      drawEdges();
-      updateStatus();
-    }
+    function refresh(){ws.innerHTML='';for(const id in DB.people)mountPerson(DB.people[id]);drawEdges();updateStatus();}
 
-    function drawEdges(){
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.lineWidth = 2 * DB.zoom;
-      ctx.strokeStyle = 'rgba(43,107,227,.6)';
-      for(const e of DB.edges){
-        const A = DB.people[e.a];
-        const B = DB.people[e.b];
-        if(!A||!B) continue;
-        const a = rectCenter(A), b = rectCenter(B);
-        ctx.beginPath();
-        if(e.type==='spouse'){
-          // collegamento orizzontale con piccolo arco
-          const midX = (a.x + b.x)/2;
-          ctx.moveTo(a.x, a.y);
-          ctx.quadraticCurveTo(midX, a.y-20, b.x, b.y);
-        } else {
-          // parentale: con "braccio" e drop verticale
-          const midX = (a.x + b.x)/2;
-          const yMid = Math.min(a.y,b.y) - 30;
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(midX, yMid);
-          ctx.lineTo(b.x, b.y);
-        }
-        ctx.stroke();
-      }
-    }
+    function rectCenter(p){return{x:(p.x||0)+100,y:(p.y||0)+40};}
 
-    function rectCenter(p){
-      const w=230, h=96; // dimensioni coerenti con CSS
-      return {x: (p.x||0) + w/2, y: (p.y||0) + h/2};
-    }
+    function drawEdges(){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.strokeStyle='black';ctx.lineWidth=1.2;for(const e of DB.edges){const A=DB.people[e.a],B=DB.people[e.b];if(!A||!B)continue;const a=rectCenter(A),b=rectCenter(B);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}}
 
-    function addPerson(partial={}){
-      const id = newId();
-      DB.people[id] = { id, name:'Nuova persona', gender:'u', x: 100 + Math.random()*300, y: 100 + Math.random()*200, ...partial };
-      refresh();
-      return id;
-    }
+    function link(a,b,type){DB.edges.push({a,b,type});refresh();}
 
-    function link(a,b,type){
-      DB.edges.push({a,b,type});
-      refresh();
-    }
+    function select(id){DB.sel=id;const p=DB.people[id];document.getElementById('pName').value=p.name||'';document.getElementById('pBirth').value=p.birth||'';document.getElementById('pDeath').value=p.death||'';document.getElementById('pGender').value=p.gender||'u';document.getElementById('pPhoto').value=p.photo||'';}
 
-    function select(id){
-      DB.sel = id;
-      const p = DB.people[id];
-      $('#pName').value = p.name||'';
-      $('#pBirth').value = p.birth||'';
-      $('#pDeath').value = p.death||'';
-      $('#pGender').value = p.gender||'u';
-      $('#pPhoto').value = p.photo||'';
-    }
+    function updateStatus(){document.getElementById('status').textContent=`Nodi: ${Object.keys(DB.people).length} · Relazioni: ${DB.edges.length}`;}
 
-    function updateStatus(){
-      $('#status').textContent = `Nodi: ${Object.keys(DB.people).length} · Relazioni: ${DB.edges.length}`;
-    }
+    document.getElementById('btnApply').onclick=()=>{if(!DB.sel)return;const p=DB.people[DB.sel];p.name=document.getElementById('pName').value;p.birth=document.getElementById('pBirth').value;p.death=document.getElementById('pDeath').value;p.gender=document.getElementById('pGender').value;p.photo=document.getElementById('pPhoto').value;refresh();};
+    document.getElementById('btnAddParent').onclick=()=>{const id=DB.sel||addPerson();const par=addPerson({name:'Genitore'});link(par,id,'parent');};
+    document.getElementById('btnAddChild').onclick=()=>{const id=DB.sel||addPerson();const ch=addPerson({name:'Figlio'});link(id,ch,'parent');};
+    document.getElementById('btnAddSpouse').onclick=()=>{const id=DB.sel||addPerson();const sp=addPerson({name:'Partner'});link(id,sp,'spouse');};
+    document.getElementById('btnDelete').onclick=()=>{if(!DB.sel)return;const id=DB.sel;delete DB.people[id];DB.edges=DB.edges.filter(e=>e.a!==id&&e.b!==id);DB.sel=null;refresh();};
 
-    // Toolbar
-    $('#btnZoomIn').onclick = ()=> { DB.zoom*=1.1; canvas.style.transform = `scale(${DB.zoom})`; };
-    $('#btnZoomOut').onclick = ()=> { DB.zoom/=1.1; canvas.style.transform = `scale(${DB.zoom})`; };
-    $('#btnCenter').onclick = ()=> { ws.scrollTo({top:0,left:0,behavior:'smooth'}); };
+    document.getElementById('fileInput').addEventListener('change',async e=>{try{const file=e.target.files[0];if(!file)return;const text=await file.text();const data=JSON.parse(text);if(data.people&&data.edges){DB.people=data.people;DB.edges=data.edges;DB.nextId=data.nextId||1;}else{alert('Formato JSON non valido');return;}refresh();}catch(err){alert('Errore import: '+err);}});
 
-    // Form
-    $('#btnApply').onclick = ()=>{
-      if(!DB.sel) return;
-      const p = DB.people[DB.sel];
-      p.name = $('#pName').value.trim()||'Senza nome';
-      p.birth = $('#pBirth').value.trim();
-      p.death = $('#pDeath').value.trim();
-      p.gender = $('#pGender').value;
-      p.photo = $('#pPhoto').value.trim();
-      refresh();
-    };
+    document.getElementById('btnExport').onclick=()=>{const data=JSON.stringify(DB,null,2);const blob=new Blob([data],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='albero.json';a.click();URL.revokeObjectURL(url);};
 
-    $('#btnAddParent').onclick = ()=>{
-      const id = DB.sel || addPerson();
-      const parent = addPerson({name:'Genitore'});
-      link(parent, id, 'parent');
-    };
-
-    $('#btnAddChild').onclick = ()=>{
-      const id = DB.sel || addPerson();
-      const child = addPerson({name:'Figlio'});
-      link(id, child, 'parent');
-    };
-
-    $('#btnAddSpouse').onclick = ()=>{
-      const id = DB.sel || addPerson();
-      const spouse = addPerson({name:'Partner'});
-      link(id, spouse, 'spouse');
-    };
-
-    $('#btnDelete').onclick = ()=>{
-      if(!DB.sel) return;
-      const id = DB.sel;
-      delete DB.people[id];
-      DB.edges = DB.edges.filter(e => e.a!==id && e.b!==id);
-      DB.sel=null; refresh();
-    };
-
-    // Import/Export JSON (schema proprio)
-    $('#fileInput').addEventListener('change', async (e)=>{
-      try {
-        const file = e.target.files && e.target.files[0];
-        if(!file) return;
-        const text = await file.text();
-        const data = JSON.parse(text);
-
-        // Accettiamo 3 casi: 
-        // A) nostro schema completo {people:{}, edges:[], nextId?, sel?}
-        // B) array semplice di persone [{id?, name, birth, death, gender, x, y, photo}]
-        // C) oggetto con chiave "nodes" e "links" (schema generico)
-        let people = {};
-        let edges = [];
-
-        if (data && data.people && data.edges) {
-          // Caso A: nostro schema
-          people = data.people;
-          edges = data.edges;
-        } else if (Array.isArray(data)) {
-          // Caso B: array di persone
-          data.forEach((p, idx)=>{
-            const id = String(p.id ?? idx+1);
-            people[id] = {
-              id,
-              name: p.name || p.title || 'Senza nome',
-              birth: p.birth || p.born || '',
-              death: p.death || p.died || '',
-              gender: p.gender || p.sex || 'u',
-              x: Number.isFinite(p.x)? p.x : (100 + Math.random()*300),
-              y: Number.isFinite(p.y)? p.y : (100 + Math.random()*200),
-              photo: p.photo || p.image || ''
-            };
-          });
-          edges = [];
-        } else if (data && data.nodes && data.links) {
-          // Caso C: schema nodi/archi generico
-          data.nodes.forEach((p, idx)=>{
-            const id = String(p.id ?? idx+1);
-            people[id] = {
-              id,
-              name: p.name || 'Senza nome',
-              birth: p.birth || '',
-              death: p.death || '',
-              gender: p.gender || 'u',
-              x: Number.isFinite(p.x)? p.x : (100 + Math.random()*300),
-              y: Number.isFinite(p.y)? p.y : (100 + Math.random()*200),
-              photo: p.photo || ''
-            };
-          });
-          edges = (data.links||[]).map(l=> ({ a: String(l.source), b: String(l.target), type: l.type==='spouse'?'spouse':'parent' }));
-        } else {
-          alert('JSON non riconosciuto. Attesi: {people,edges} oppure [persone] oppure {nodes,links}.');
-          return;
-        }
-
-        // Sostituisci DB in modo sicuro
-        DB.people = people;
-        DB.edges = edges;
-        DB.sel = null;
-        // nextId = maxId+1
-        const maxId = Object.keys(DB.people).reduce((m, id)=> Math.max(m, Number(id)||0), 0);
-        DB.nextId = (maxId||0) + 1;
-
-        refresh();
-        updateStatus();
-        alert('Import completato');
-      } catch(err){
-        console.error(err);
-        alert('Errore durante l\'import: ' + (err.message||err));
-      }
-    });
-
-    $('#btnExport').onclick = ()=>{
-      const data = JSON.stringify(DB, null, 2);
-      const blob = new Blob([data], {type:'application/json'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'geneaview.json'; a.click();
-      URL.revokeObjectURL(url);
-    };
-
-    // Seed iniziale
-    const a = addPerson({name:'Nonno', birth:'1945', x:200, y:120});
-    const b = addPerson({name:'Nonna', birth:'1948', x:500, y:120});
-    link(a,b,'spouse');
-    const c = addPerson({name:'Padre', birth:'1975', x:350, y:260});
-    link(a,c,'parent'); link(b,c,'parent');
-    const d = addPerson({name:'Figlio', birth:'2005', x:350, y:420});
-    link(c,d,'parent');
-
-    // Prima selezione
-    select(c);
-
-    // Prima render
+    addPerson({name:'Nonno',x:200,y:60});addPerson({name:'Nonna',x:500,y:60});refresh();
     resize();
   </script>
 </body>
