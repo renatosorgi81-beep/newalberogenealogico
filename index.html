@@ -3,20 +3,24 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GeneaView – Albero genealogico (AI‑like layout)</title>
+  <title>GeneaView – Albero genealogico (AI‑like layout, grid & spouse)</title>
   <style>
     :root{
       --bg:#fbfaf9;--panel:#ffffff;--ink:#2e2a27;--muted:#7b6f67;--line:#cfc7c2;
       --node:#f0ebe7;--node-border:#9b877b;--shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.06);
+      --spouse:#4a4a4a;--parent:#000000;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--ink);font:14px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
     .topbar{display:flex;align-items:center;gap:10px;height:52px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:10}
     .brand{font-weight:700}
-    .toolbar{margin-left:auto;display:flex;gap:8px}
-    .btn{border:1px solid var(--line);background:#fff;height:34px;padding:0 10px;border-radius:10px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;box-shadow:var(--shadow)}
+    .toolbar{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+    .btn, .ctrl{border:1px solid var(--line);background:#fff;height:34px;padding:0 10px;border-radius:10px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;box-shadow:var(--shadow)}
     .btn:hover{background:#f6f6f6}
+    .ctrl{cursor:auto}
+    .ctrl input{width:62px;border:1px solid var(--line);border-radius:8px;padding:4px 6px}
+    .ctrl label{font-size:12px;color:var(--muted)}
     .layout{display:grid;grid-template-columns:320px 1fr;height:calc(100% - 52px)}
     .sidebar{border-right:1px solid var(--line);padding:12px;background:var(--panel);overflow:auto}
     .section{margin-bottom:16px}
@@ -32,16 +36,33 @@
     .node .photo{width:50px;height:50px;border-radius:6px;background:#fff;border:1px solid var(--line);margin:0 auto 6px;overflow:hidden}
     canvas{position:absolute;inset:0;pointer-events:none}
   </style>
-  <!-- Libreria per layout a grafo (Sugiyama) -->
-  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <!-- Caricamento locale (offline) + fallback CDN di Dagre -->
+  <script defer src="./lib/dagre.min.js" onerror=""></script>
+  <script>
+    (function(){
+      function loadCDN(){
+        var s=document.createElement('script');
+        s.src='https://unpkg.com/dagre@0.8.5/dist/dagre.min.js';
+        document.head.appendChild(s);
+      }
+      if(!window.dagre){
+        // Se lo script locale non è disponibile, prova CDN dopo un tick
+        setTimeout(function(){ if(!window.dagre) loadCDN(); }, 50);
+      }
+    })();
+  </script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">GeneaView</div>
     <div class="toolbar">
+      <div class="ctrl"><label for="ranksep">ranksep</label>&nbsp;<input id="ranksep" type="number" value="120" min="60" step="10"></div>
+      <div class="ctrl"><label for="nodesep">nodesep</label>&nbsp;<input id="nodesep" type="number" value="40" min="20" step="5"></div>
+      <div class="ctrl"><label for="gridsnap">grid</label>&nbsp;<input id="gridsnap" type="number" value="10" min="0" step="5" title="0 = disattivato"></div>
+      <div class="ctrl"><label for="useOrder">rispetta order</label>&nbsp;<input id="useOrder" type="checkbox" checked></div>
+      <button class="btn" id="btnRelayout">Ricalcola layout AI</button>
       <button class="btn" id="btnExport">Esporta JSON</button>
       <label class="btn">Importa JSON<input id="fileInput" type="file" accept="application/json" hidden /></label>
-      <button class="btn" id="btnRelayout">Ricalcola layout AI</button>
     </div>
   </header>
   <main class="layout">
@@ -71,7 +92,7 @@
   </main>
   <script>
     // ===== Stato =====
-    const DB={people:{},edges:[],sel:null,nextId:1,layout:'ai'}; // layout: 'ai' | 'manual'
+    const DB={people:{},edges:[],sel:null,nextId:1,layout:'ai', order:[]}; // layout: 'ai' | 'manual'
 
     const ws=document.getElementById('workspace');
     const canvas=document.getElementById('edges');
@@ -83,11 +104,13 @@
     // ===== Helpers =====
     function newId(){return String(DB.nextId++);}    
     function rectCenter(p){return{x:(p.x||0)+110,y:(p.y||0)+45};}
+    function snap(v,grid){ return grid>0 ? Math.round(v/grid)*grid : v; }
 
     // ===== CRUD Persone =====
     function addPerson(p={}){
       const id=newId();
       DB.people[id]={id,name:'Persona',gender:'u',x:100,y:100,parents:[],...p};
+      if(!DB.order.includes(id)) DB.order.push(id);
       refresh();return id;
     }
 
@@ -104,53 +127,78 @@
 
     function updateStatus(){document.getElementById('status').textContent=`Nodi: ${Object.keys(DB.people).length} · Relazioni: ${DB.edges.length}`;}
 
-    // ===== AI-like Layout con Dagre =====
+    // ===== AI-like Layout con Dagre + griglia + rispetto order =====
+    let _edgePoints = [];
     function aiLayout(){
       if(!window.dagre) return; // fallback silenzioso
+      const ranksep = +document.getElementById('ranksep').value || 120;
+      const nodesep = +document.getElementById('nodesep').value || 40;
+      const grid    = +document.getElementById('gridsnap').value || 0;
+      const useOrder= document.getElementById('useOrder').checked;
+
       const g = new dagre.graphlib.Graph({ multigraph:true, compound:false });
-      g.setGraph({ rankdir:'TB', nodesep:40, ranksep:120, marginx:40, marginy:40 });
+      g.setGraph({ rankdir:'TB', nodesep:nodesep, ranksep:ranksep, marginx:40, marginy:40, ranker:'network-simplex' });
       g.setDefaultEdgeLabel(()=>({}));
 
       // nodi: stessa dimensione box
       const W=220, H=90;
       for(const id in DB.people){ g.setNode(id,{ width:W, height:H }); }
 
-      // relazioni: dai parents generiamo archi parentali
-      const edges=[];
-      for(const id in DB.people){
-        const p=DB.people[id];
-        (p.parents||[]).forEach(pr=> edges.push({a:String(pr), b:String(id), type:'parent'}));
-      }
-      // unisci con eventuali spouse già presenti
-      DB.edges.forEach(e=> edges.push(e));
+      // edges: dai parents e dagli spouse esistenti
+      const allEdges=[];
+      for(const id in DB.people){ (DB.people[id].parents||[]).forEach(pr=> allEdges.push({a:String(pr), b:String(id), type:'parent'})); }
+      DB.edges.forEach(e=> allEdges.push(e));
 
-      edges.forEach((e,i)=> g.setEdge(e.a, e.b, { type:e.type||'parent' }, 'e'+i));
+      // vincolo: gli spouse sullo stesso livello e vicini (minlen 0, peso alto)
+      allEdges.forEach((e,i)=>{
+        const label = (e.type==='spouse') ? { minlen:0, weight:5, type:'spouse' } : { minlen:1, weight:1, type:'parent' };
+        g.setEdge(e.a, e.b, label, 'e'+i);
+      });
 
       dagre.layout(g);
 
-      // scrivi posizioni sui nostri nodi
+      // Post-ordinamento per rispettare `order` su livelli con stessa Y
+      const orderIndex={}; (DB.order||[]).forEach((id,i)=> orderIndex[String(id)]=i);
+      const levels={};
+      g.nodes().forEach(id=>{
+        const n=g.node(id); const y=Math.round(n.y);
+        (levels[y]=levels[y]||[]).push({id, x:n.x});
+      });
+      Object.keys(levels).forEach(y=>{
+        const arr=levels[y];
+        if(useOrder){ arr.sort((A,B)=> (orderIndex[A.id]??1e9) - (orderIndex[B.id]??1e9)); }
+        else { arr.sort((A,B)=> A.x - B.x); }
+        const totalW = (arr.length-1)*nodesep + arr.length*W;
+        let startX = (g.graph().width - totalW)/2 + W/2; // centro riga
+        arr.forEach((o)=>{ g.node(o.id).x = startX; startX += W + nodesep; });
+      });
+
+      // scrivi posizioni sui nostri nodi (+snap griglia)
       const graph = g.graph();
       const dx = Math.max(0, (ws.clientWidth  - (graph.width  ||0)) / 2);
       const dy = Math.max(0, (ws.clientHeight - (graph.height ||0)) / 2);
 
       g.nodes().forEach(id=>{
         const n = g.node(id);
-        if(DB.people[id]){ DB.people[id].x = Math.round((n.x - W/2) + dx); DB.people[id].y = Math.round((n.y - H/2) + dy); }
+        if(DB.people[id]){
+          const px = snap((n.x - W/2) + dx, grid);
+          const py = snap((n.y - H/2) + dy, grid);
+          DB.people[id].x = Math.round(px);
+          DB.people[id].y = Math.round(py);
+        }
       });
 
-      // memorizza edge points per linee ortogonali pulite
+      // memorizza edge points per disegno
       _edgePoints = [];
       g.edges().forEach(eid=>{
         const e = g.edge(eid);
         const pts = e.points || [];
-        _edgePoints.push({ a:e.v, b:e.w, type:e.type||'parent', points: pts.map(p=>({x:Math.round(p.x), y:Math.round(p.y)})) });
+        _edgePoints.push({ a:e.v, b:e.w, type:e.type||'parent', points: pts.map(p=>({x:Math.round(snap(p.x,grid)), y:Math.round(snap(p.y,grid))})) });
       });
 
-      // sostituisci anche DB.edges (parentali) in base ai parents
-      DB.edges = edges;
+      // sostituisci DB.edges con unificato (parent+spouse)
+      DB.edges = allEdges;
     }
-
-    let _edgePoints = [];
 
     // ===== Render =====
     function refresh(){
@@ -162,20 +210,27 @@
 
     function drawEdges(){
       ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.strokeStyle='black'; ctx.lineWidth=1.2;
 
       if(DB.layout==='ai' && _edgePoints.length){
-        // Usa i punti calcolati da Dagre (polilinee morbide ma dritte tra punti)
         for(const e of _edgePoints){
-          const pts = e.points; if(!pts||pts.length<2) continue;
-          ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+          ctx.beginPath();
+          if(e.type==='spouse'){
+            ctx.setLineDash([6,6]); ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--spouse');
+          } else {
+            ctx.setLineDash([]); ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--parent');
+          }
+          ctx.lineWidth=1.4;
+          const pts=e.points; if(!pts||pts.length<2) continue;
+          ctx.moveTo(pts[0].x, pts[0].y);
           for(let i=1;i<pts.length;i++){ ctx.lineTo(pts[i].x, pts[i].y); }
           ctx.stroke();
         }
         return;
       }
 
-      // Fallback: gomito semplice
+      // Fallback semplice
+      ctx.setLineDash([]); ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--parent');
+      ctx.lineWidth=1.2;
       for(const e of DB.edges){
         const A=DB.people[e.a], B=DB.people[e.b]; if(!A||!B) continue;
         const a=rectCenter(A), b=rectCenter(B); const midX=(a.x+b.x)/2;
@@ -203,7 +258,8 @@
 
     document.getElementById('btnAddSpouse').onclick=()=>{
       if(!DB.sel) return; const sp=addPerson({name:'Partner'});
-      DB.edges.push({a:DB.sel,b:sp,type:'spouse'}); // spouse non è un legame parentale
+      DB.edges.push({a:DB.sel,b:sp,type:'spouse'}); // spouse non è parentale
+      if(!DB.order.includes(sp)) DB.order.push(sp);
       refresh();
     };
 
@@ -211,6 +267,7 @@
       if(!DB.sel) return; const id=DB.sel; delete DB.people[id];
       DB.edges = DB.edges.filter(e=> e.a!==id && e.b!==id);
       for(const pid in DB.people){ const pp=DB.people[pid]; if(Array.isArray(pp.parents)) pp.parents = pp.parents.filter(x=> String(x)!==String(id)); }
+      DB.order = DB.order.filter(x=> String(x)!==String(id));
       DB.sel=null; refresh();
     };
 
@@ -221,46 +278,33 @@
       try{
         const file=e.target.files && e.target.files[0];
         if(!file) return; const text=await file.text(); const data=JSON.parse(text);
-        let people={}, edges=[];
+        let people={}, edges=[], order=[]; let nextId=null;
 
         if (data && data.people){
-          // tuo schema: {people:{ id:{..., parents:[...] }}, order?, nextId?}
-          people = data.people; edges=[]; // edges saranno ricostruiti dal layout
-          DB.nextId = data.nextId || calcNextId(people);
+          people = data.people; edges = data.edges||[]; order = data.order||[]; nextId = data.nextId||null;
         } else if (data && data.nodes && data.links){
-          data.nodes.forEach((p,idx)=>{
-            const id=String(p.id ?? idx+1);
-            people[id]={id, name:p.name||p.label||'Senza nome', x:+p.x||0, y:+p.y||0, photo:p.photo||'', parents: p.parents||[]};
-          });
+          data.nodes.forEach((p,idx)=>{ const id=String(p.id ?? idx+1); people[id]={id, name:p.name||p.label||'Senza nome', x:+p.x||0, y:+p.y||0, photo:p.photo||'', parents: p.parents||[]}; order.push(id); });
           edges=(data.links||[]).map(l=>({a:String(l.source), b:String(l.target), type:(l.type==='spouse'?'spouse':'parent')}));
         } else if (Array.isArray(data)){
-          data.forEach((p,idx)=>{
-            const id=String(p.id ?? idx+1);
-            people[id]={id, name:p.name||p.title||'Senza nome', x:+p.x||0, y:+p.y||0, photo:p.photo||p.image||'', parents: p.parents||[]};
-          });
+          data.forEach((p,idx)=>{ const id=String(p.id ?? idx+1); people[id]={id, name:p.name||p.title||'Senza nome', x:+p.x||0, y:+p.y||0, photo:p.photo||p.image||'', parents: p.parents||[]}; order.push(id); });
         } else if (data && data.persons){
-          data.persons.forEach((p,idx)=>{
-            const id=String(p.id ?? idx+1);
-            people[id]={id, name:p.name||'Senza nome', x:+p.x||0, y:+p.y||0, photo:p.photo||'', parents: p.parents||[]};
-          });
+          data.persons.forEach((p,idx)=>{ const id=String(p.id ?? idx+1); people[id]={id, name:p.name||'Senza nome', x:+p.x||0, y:+p.y||0, photo:p.photo||'', parents: p.parents||[]}; order.push(id); });
           edges=(data.relations||[]).map(r=>({a:String(r.a||r.from), b:String(r.b||r.to), type:(r.type==='spouse'?'spouse':'parent')}));
-        } else {
-          alert('JSON non riconosciuto. Attesi: {people} (con parents) / [persone] / {nodes,links} / {persons,relations}.');
-          return;
-        }
+        } else { alert('JSON non riconosciuto.'); return; }
 
-        DB.people=people; DB.edges=edges; DB.sel=null; DB.layout='ai';
-        refresh(); updateStatus();
-        alert('Import completato');
+        DB.people=people; DB.edges=edges; DB.order=order; DB.sel=null; if(nextId) DB.nextId=nextId; else DB.nextId = calcNextId(people);
+        DB.layout='ai'; refresh(); updateStatus(); alert('Import completato');
       }catch(err){ console.error(err); alert('Errore import: '+(err.message||err)); }
     });
 
     document.getElementById('btnExport').onclick=()=>{
-      const data = { people: DB.people, edges: DB.edges, nextId: DB.nextId };
+      const data = { people: DB.people, edges: DB.edges, order: DB.order, nextId: DB.nextId };
       const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
       const url=URL.createObjectURL(blob); const a=document.createElement('a');
       a.href=url; a.download='albero.json'; a.click(); URL.revokeObjectURL(url);
     };
+
+    function calcNextId(people){ const maxId = Object.keys(people||{}).reduce((m,id)=> Math.max(m, +id||0), 0); return (maxId||0) + 1; }
 
     // ===== Seed demo minimo =====
     addPerson({name:'Nonno',x:200,y:60});
