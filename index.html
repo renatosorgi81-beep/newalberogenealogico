@@ -142,6 +142,8 @@
       <div class="btns" style="margin-top:6px">
         <button id="btnPNG">Scarica PNG</button>
         <button id="btnFE">Apri in FamilyEcho (24h)</button>
+        <button id="btnFESelf">Apri qui (fallback)</button>
+        <button id="btnFETest">Test API</button>
         <button id="btnPrint">Stampa / PDF</button>
         <button id="btnCenter">Centra</button>
       </div>
@@ -451,7 +453,7 @@
 
   // ======= Condivisione: URL sola lettura =======
   el('#btnShare').addEventListener('click', ()=>{ const data = {people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId}; const enc = btoa(unescape(encodeURIComponent(JSON.stringify(data)))); const url = location.origin + location.pathname + '#view=' + enc; navigator.clipboard.writeText(url).then(()=>showToast('Link copiato negli appunti (sola lettura)')); });
-  function tryViewFromHash(){ const m = location.hash.match(/#view=([A-Za-z0-9+/=]+)/); if(!m) return false; const json = decodeURIComponent(escape(atob(m[1]))); const data = JSON.parse(json); state.people = data.people||{}; state.spouses=data.spouses||[]; state.adoptions=data.adoptions||[]; state.rootId=data.rootId||null; render(); document.querySelectorAll('aside button, aside input, aside select, aside textarea').forEach(n=>{ if(n.id!=='btnFE') n.disabled=true; }); showToast('Modalità sola lettura: comandi disattivati (FamilyEcho attivo)'); showToast('Visualizzazione sola lettura'); return true; }
+  function tryViewFromHash(){ const m = location.hash.match(/#view=([A-Za-z0-9+/=]+)/); if(!m) return false; const json = decodeURIComponent(escape(atob(m[1]))); const data = JSON.parse(json); state.people = data.people||{}; state.spouses=data.spouses||[]; state.adoptions=data.adoptions||[]; state.rootId=data.rootId||null; render(); document.querySelectorAll('aside button, aside input, aside select, aside textarea').forEach(n=>{ if(n.id!=='btnFE' && n.id!=='btnFESelf' && n.id!=='btnFETest') n.disabled=true; }); showToast('Modalità sola lettura: comandi disattivati (FamilyEcho attivo)'); showToast('Modalità sola lettura: comandi disattivati (FamilyEcho attivo)'); showToast('Visualizzazione sola lettura'); return true; }
 
   // ======= GEDCOM (supporto base) =======
   function buildGEDCOM(){
@@ -494,9 +496,51 @@
   }
   el('#btnGedExport').addEventListener('click', gedExport);
   // FamilyEcho preview (24h)
-  function openInFamilyEcho(){
+  function openInFamilyEcho(targetMode='popup'){
     try{
       if(!Object.keys(state.people).length){ showToast('Nessun dato da inviare'); return; }
+      const {gedcom, idMap} = buildGEDCOM();
+      const params = { operation:'temp_view', format:'redirect', family: gedcom, hide_header:'1', hide_sidebar:'1', hide_navbar:'1', background_color:'ffffff' };
+      if(state.rootId && idMap[state.rootId]) params.focus = '@'+idMap[state.rootId]+'@';
+
+      const form = document.createElement('form');
+      form.method='POST';
+      form.action='https://www.familyecho.com/api/';
+
+      if(targetMode==='popup'){
+        const win = window.open('', 'fe_preview');
+        if(!win){ alert('Il browser ha bloccato la nuova scheda. Consenti i pop‑up per questo sito e riprova, oppure usa "Apri qui (fallback)".'); return; }
+        form.target='fe_preview';
+      } else {
+        form.target='_self'; // naviga nella stessa scheda, niente blocco popup
+      }
+
+      for(const k in params){ const inp=document.createElement('input'); inp.type='hidden'; inp.name=k; inp.value=params[k]; form.appendChild(inp); }
+      document.body.appendChild(form);
+      form.submit();
+      setTimeout(()=>form.remove(), 0);
+      if(targetMode==='popup') showToast('Anteprima FamilyEcho aperta in una nuova scheda.');
+    }catch(e){ console.error(e); alert('Impossibile aprire FamilyEcho: '+e.message); }
+  }
+
+  function openTestInFamilyEcho(targetMode='popup'){
+    // GEDCOM minimo di diagnostica: 1 persona
+    const sample = [
+      '0 HEAD','1 SOUR GeneaMVP','1 GEDC','2 VERS 5.5.1','1 CHAR UTF-8',
+      '0 @I1@ INDI','1 NAME Test /Persona/','1 SEX U','0 TRLR'
+    ].join('\n');
+
+    const params = { operation:'temp_view', format:'redirect', family: sample, hide_header:'1', hide_sidebar:'1', hide_navbar:'1', background_color:'ffffff', focus:'@I1@' };
+    const form = document.createElement('form');
+    form.method='POST'; form.action='https://www.familyecho.com/api/';
+    if(targetMode==='popup'){
+      const win = window.open('', 'fe_preview');
+      if(!win){ alert('Popup bloccato. Usa "Apri qui (fallback)".'); return; }
+      form.target='fe_preview';
+    } else { form.target='_self'; }
+    for(const k in params){ const inp=document.createElement('input'); inp.type='hidden'; inp.name=k; inp.value=params[k]; form.appendChild(inp); }
+    document.body.appendChild(form); form.submit(); setTimeout(()=>form.remove(), 0);
+  }
       const {gedcom, idMap} = buildGEDCOM();
       // apri PRIMA una scheda nominata (evita block popup), poi invia il POST a quella scheda
       const win = window.open('', 'fe_preview');
@@ -526,7 +570,9 @@
       setTimeout(()=>form.remove(), 0);
     }catch(e){ console.error(e); alert('Impossibile aprire FamilyEcho: '+e.message); }
   }
-  el('#btnFE').addEventListener('click', openInFamilyEcho);
+  el('#btnFE').addEventListener('click', ()=>openInFamilyEcho('popup'));
+  el('#btnFESelf').addEventListener('click', ()=>openInFamilyEcho('self'));
+  el('#btnFETest').addEventListener('click', ()=>openTestInFamilyEcho('popup'));
   function gedImport(){ const inp = document.createElement('input'); inp.type='file'; inp.accept='.ged,text/plain'; inp.onchange=()=>{ const f = inp.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ try{ snapshot(); const lines=String(rd.result).split(/\r?\n/); const indi={}, fams=[]; let cur=null, curFam=null; for(const ln of lines){ const m = ln.match(/^(\d+)\s+(?:@([^@]+)@\s+)?(\w+)(?:\s+(.*))?$/); if(!m) continue; const lvl=+m[1], id=m[2], tag=m[3], val=m[4]||''; if(lvl===0 && tag==='INDI'){ cur = id; indi[cur]={name:'', sex:'U', birt:'', deat:''}; } else if(lvl===0 && tag==='FAM'){ curFam = {husb:null, wife:null, chil:[]}; fams.push({id, ...curFam}); curFam = fams[fams.length-1]; } else if(cur){ if(tag==='NAME'&&lvl===1){ indi[cur].name=val.replace(/\/(.*?)\//, (m)=>m.slice(1,-1)); } if(tag==='SEX'&&lvl===1){ indi[cur].sex=val; } if(tag==='BIRT'&&lvl===1){ indi[cur]._ctx='BIRT'; } if(tag==='DEAT'&&lvl===1){ indi[cur]._ctx='DEAT'; } if(tag==='DATE'&&lvl===2){ if(indi[cur]._ctx==='BIRT') indi[cur].birt=val; if(indi[cur]._ctx==='DEAT') indi[cur].deat=val; } } else if(curFam){ if(tag==='HUSB'&&lvl===1) curFam.husb=val.replace(/@/g,''); if(tag==='WIFE'&&lvl===1) curFam.wife=val.replace(/@/g,''); if(tag==='CHIL'&&lvl===1) curFam.chil.push(val.replace(/@/g,'')); } } const map={}; for(const gid in indi){ const data=indi[gid]; const id=rid(); map[gid]=id; state.people[id]={id, name:data.name||'', gender:data.sex==='M'?'m':data.sex==='F'?'f':'u', born:data.birt||'', death:data.deat||'', parents:[], children:[], x:0, y:0}; } fams.forEach(F=>{ const a=map[F.husb], b=map[F.wife]; if(a&&b) state.spouses.push([a,b]); F.chil.forEach(cg=>{ const c=map[cg]; if(c&&a) linkParentChild(a,c,false); if(c&&b) linkParentChild(b,c,false); }); }); layout(); showToast('GEDCOM importato'); }catch(e){ alert('GEDCOM non valido: '+e.message); } }; rd.readAsText(f); }; inp.click(); }
   el('#btnGedImport').addEventListener('click', gedImport);
 
