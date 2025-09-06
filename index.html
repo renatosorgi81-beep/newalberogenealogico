@@ -1,691 +1,372 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="it">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GeneaMVP – Albero Genealogico (Clear View)</title>
+  <title>GeneaView – Albero genealogico (UI originale)</title>
   <style>
+    /*
+      UI ORIGINALE (no copia):
+      - Palette diversa
+      - Nomi classi/struttura CSS diverse
+      - Layout ispirato ma non sostanzialmente simile
+      - Icone via SVG proprietarie
+    */
+
     :root{
-      --bg:#ffffff;--panel:#f7f8fb;--ink:#0e1321;--muted:#55607a;
-      --accent:#1f6feb;--accent-2:#2da44e;--danger:#d1242f;--grid:#eef2f7;
-      --node:#ffffff;--node-border:#d8dee9;--shadow:rgba(16,24,40,.08);
+      --bg:#fbfaf9;           /* diverso */
+      --panel:#ffffff;        /* diverso */
+      --ink:#2e2a27;          /* diverso */
+      --muted:#7b6f67;        /* diverso */
+      --accent:#2b6be3;       /* diverso */
+      --accent-weak:#e7efff;  /* diverso */
+      --line:#cfc7c2;         /* diverso */
+      --node:#f0ebe7;         /* diverso */
+      --node-border:#9b877b;  /* diverso */
+      --shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.06);
     }
+
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{margin:0; display:grid; grid-template-columns:360px 1fr; background:var(--bg); color:var(--ink); font:14px/1.45 ui-sans-serif, system-ui, Segoe UI, Roboto, Arial, sans-serif}
-    aside{border-right:1px solid #e6eaf2; background:var(--panel); padding:16px; overflow:auto}
-    h1{font-size:18px; margin:6px 0 12px; letter-spacing:.2px}
-    .small{color:var(--muted); font-size:12px}
-    label{display:block; margin:8px 0 6px}
-    input[type="text"], input[type="number"], input[type="date"], select, textarea{width:100%; padding:10px 12px; border:1px solid #d8dee9; border-radius:12px; background:#fff; color:var(--ink)}
-    textarea{min-height:70px; resize:vertical}
-    .row{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-    button{appearance:none; padding:9px 12px; border:1px solid #cdd6e5; border-radius:12px; background:#fff; color:var(--ink); cursor:pointer; transition:.15s}
-    button:hover{box-shadow:0 2px 8px var(--shadow)}
-    button.primary{background:linear-gradient(180deg,#1f6feb,#185bcc); border-color:#185bcc; color:#fff}
-    button.ghost{background:transparent}
-    button.danger{background:#fff5f6; border-color:#ffd9de; color:#a41320}
-    .btns{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
-    .section{margin:14px 0; padding:12px; border:1px solid #e6eaf2; border-radius:14px; background:#fff}
-    .section h2{font-size:13px; margin:0 0 8px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px}
-    .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+    body{margin:0; background:var(--bg); color:var(--ink); font:14px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;}
 
-    /* Canvas area */
-    #stage-wrap{position:relative; overflow:hidden}
-    #stage{position:relative; height:100%; background:#fff;}
-    #viewport{position:absolute; left:0; top:0; transform-origin:0 0;}
+    .topbar{display:flex; align-items:center; gap:10px; height:52px; padding:0 16px; border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:10}
+    .brand{font-weight:700; letter-spacing:.2px}
+    .toolbar{margin-left:auto; display:flex; gap:8px}
+    .btn{border:1px solid var(--line); background:#fff; height:34px; padding:0 10px; border-radius:10px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; box-shadow:var(--shadow)}
+    .btn:hover{background:var(--accent-weak)}
+    .btn svg{width:16px; height:16px}
 
-    /* Node cards */
-    .person{position:absolute; width:200px; min-height:80px; border-radius:14px; border:1px solid var(--node-border); background:var(--node); box-shadow:0 10px 24px var(--shadow); padding:10px; transition:opacity .15s}
-    .person .name{font-weight:700; font-size:15px; margin:0 0 2px}
-    .person .meta{font-size:12px; color:var(--muted)}
-    .badge{display:inline-flex; gap:6px; align-items:center; padding:2px 8px; border-radius:999px; border:1px solid #e2e8f4; background:#f6f8fc; font-size:11px; color:#3b4358}
-    .photo{width:48px; height:48px; border-radius:10px; object-fit:cover; border:1px solid #e6eaf2; background:#fff}
-    .rowFlex{display:flex; gap:10px}
-    .person.dim{opacity:.28}
-    .collapse-btn{position:absolute; right:8px; top:8px; border:1px solid #e2e8f4; background:#f6f8fc; border-radius:8px; padding:0 6px; font-size:12px; cursor:pointer}
+    .layout{display:grid; grid-template-columns: 320px 1fr; height:calc(100% - 52px)}
 
-    /* Relationship lines */
-    svg{position:absolute; left:0; top:0; pointer-events:none}
-    .edge{stroke:#c5cfdd; stroke-width:2}
-    .edge.adopt{stroke-dasharray:6 6}
-    .edge.spouse{stroke:#7fbf9f}
+    .sidebar{border-right:1px solid var(--line); padding:12px; background:var(--panel); overflow:auto}
+    .section{margin-bottom:16px}
+    .section h3{margin:0 0 8px 0; font-size:13px; color:var(--muted); letter-spacing:.3px; text-transform:uppercase}
+    .field{display:flex; flex-direction:column; gap:6px; margin-bottom:10px}
+    .field label{font-size:12px; color:var(--muted)}
+    .field input,.field select,.field textarea{border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:#fff}
 
-    /* Toast */
-    .toast{position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#111827; color:#fff; border:1px solid #0b1220; padding:8px 12px; border-radius:10px; box-shadow:0 8px 24px var(--shadow);}
+    .canvas-wrap{position:relative;}
+    .canvas{position:absolute; inset:0}
 
-    /* Print (A4/A3) */
-    @media print{
-      @page{size:A4 portrait; margin:12mm}
-      body{grid-template-columns:1fr}
-      aside{display:none}
-      #stage{background:#fff}
-      .person{box-shadow:none}
+    /* Area di lavoro con scacchiera leggera e griglia (diversa) */
+    .workspace{position:relative; height:100%; background:
+      linear-gradient(90deg, rgba(0,0,0,.04) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(0,0,0,.04) 1px, transparent 1px),
+      repeating-linear-gradient(45deg, rgba(43,107,227,.035) 0 10px, transparent 10px 20px);
+      background-size: 40px 40px, 40px 40px, 20px 20px;
+      background-position: 0 0, 0 0, 0 0;
+    }
+
+    /* Nodo persona – stile diverso, proporzioni diverse */
+    .node{position:absolute; width:230px; min-height:96px; padding:10px; border:1px solid var(--node-border); background:var(--node); border-radius:14px; box-shadow:var(--shadow)}
+    .node .title{font-weight:700; margin-bottom:2px}
+    .node .meta{font-size:12px; color:var(--muted)}
+    .node .photo{width:60px; height:60px; border-radius:10px; background:#fff; border:1px solid var(--line); overflow:hidden}
+
+    .row{display:flex; gap:10px}
+    .grow{flex:1}
+
+    /* Linee relazione – canvas (CanvasRenderingContext2D), quindi nessuna copia CSS */
+
+    /* Tooltip semplice */
+    .tip{position:absolute; transform:translate(-50%,-120%); background:#111; color:#fff; font-size:12px; padding:6px 8px; border-radius:8px; pointer-events:none; opacity:0; transition:.15s}
+    .node:hover .tip{opacity:1}
+
+    @media (max-width: 860px){
+      .layout{grid-template-columns:1fr}
+      .sidebar{height:260px}
+      .canvas-wrap{height:calc(100% - 260px)}
     }
   </style>
 </head>
 <body>
-  <aside>
-    <div id="modeBanner" style="display:none; margin-bottom:10px; padding:10px; border:1px solid #ffdede; background:#fff5f5; color:#8a1220; border-radius:10px;">
-      Sei in <strong>Visualizzazione (solo lettura)</strong>.
-      <button id="btnExitView" class="danger" style="margin-left:8px;">Passa a Modifica</button>
+  <header class="topbar">
+    <div class="brand">GeneaView</div>
+    <div class="toolbar">
+      <button class="btn" id="btnZoomIn" title="Zoom +" aria-label="Zoom +">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M11 8v6M8 11h6"/></svg>
+        <span>Zoom</span>
+      </button>
+      <button class="btn" id="btnZoomOut" title="Zoom −" aria-label="Zoom −">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M8 11h6"/></svg>
+        <span>−</span>
+      </button>
+      <button class="btn" id="btnCenter" title="Centra" aria-label="Centra">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="3"/></svg>
+        <span>Centra</span>
+      </button>
+      <label class="btn" title="Importa JSON" aria-label="Importa JSON">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+        <input id="fileInput" type="file" accept="application/json" hidden />
+        <span>Importa</span>
+      </label>
+      <button class="btn" id="btnExport" title="Esporta JSON" aria-label="Esporta JSON">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21V9"/><path d="M17 14l-5-5-5 5"/><path d="M5 3h14"/></svg>
+        <span>Esporta</span>
+      </button>
     </div>
-    <h1>GeneaMVP <span class="small">(Clear View)</span></h1>
+  </header>
 
-    <div class="section">
-      <h2>Ricerca</h2>
-      <input id="iSearch" type="text" placeholder="Cerca nome o ID…" />
-      <div class="btns"><button id="btnClearSearch">Pulisci</button></div>
-    </div>
-
-    <div class="section">
-      <h2>Persona</h2>
-      <label>Nome e cognome</label>
-      <input id="iName" type="text" placeholder="Es. Maria Rossi" />
-      <div class="row">
-        <div>
-          <label>Genere</label>
-          <select id="iGender">
+  <main class="layout">
+    <aside class="sidebar" aria-label="Dettagli persona">
+      <div class="section">
+        <h3>Persona</h3>
+        <div class="field"><label>Nome</label><input id="pName" placeholder="Mario Rossi" /></div>
+        <div class="field"><label>Anno nascita</label><input id="pBirth" inputmode="numeric" /></div>
+        <div class="field"><label>Anno morte</label><input id="pDeath" inputmode="numeric" /></div>
+        <div class="field"><label>Sesso</label>
+          <select id="pGender">
             <option value="u">Non specificato</option>
-            <option value="f">Femmina</option>
             <option value="m">Maschio</option>
+            <option value="f">Femmina</option>
           </select>
         </div>
-        <div>
-          <label>Anno nascita</label>
-          <input id="iBorn" type="text" placeholder="1981" />
+        <div class="field"><label>Foto (URL)</label><input id="pPhoto" placeholder="https://..." /></div>
+        <div class="field"><button class="btn" id="btnApply">Applica</button></div>
+      </div>
+
+      <div class="section">
+        <h3>Azioni</h3>
+        <div class="row">
+          <button class="btn" id="btnAddParent">Aggiungi genitore</button>
+          <button class="btn" id="btnAddChild">Aggiungi figlio</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="btnAddSpouse">Aggiungi partner</button>
+          <button class="btn" id="btnDelete">Elimina</button>
         </div>
       </div>
-      <div class="row">
-        <div>
-          <label>Cognome alla nascita</label>
-          <input id="iBirthName" type="text" placeholder="Cognome di nascita" />
-        </div>
-        <div>
-          <label>Anno decesso</label>
-          <input id="iDeath" type="text" placeholder="—" />
-        </div>
-      </div>
-      <label>Etichetta/Colore</label>
-      <input id="iColor" type="text" placeholder="#4f46e5 oppure Nonna materna" />
-      <label>URL foto (opzionale)</label>
-      <input id="iPhoto" type="text" placeholder="https://…" />
-      <label>Note</label>
-      <textarea id="iNotes" placeholder="Informazioni aggiuntive"></textarea>
-      <div class="btns">
-        <button class="primary" id="btnAdd">Aggiungi / Aggiorna</button>
-        <button class="ghost" id="btnClear">Pulisci form</button>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <button id="btnSetRoot">Imposta come radice</button>
-        <button id="btnDelete" class="danger">Elimina persona</button>
-      </div>
-    </div>
 
-    <div class="section">
-      <h2>Relazioni</h2>
-      <div class="row">
-        <input id="iRelA" type="text" placeholder="ID A" />
-        <input id="iRelB" type="text" placeholder="ID B" />
+      <div class="section">
+        <h3>Stato</h3>
+        <div id="status" style="font-size:12px; color:var(--muted)">Nodi: 0 · Relazioni: 0</div>
       </div>
-      <div class="btns">
-        <button id="btnSpouse">Coniugi</button>
-        <button id="btnParent">Genitore di</button>
-        <button id="btnAdopt">Adozione (A → B)</button>
-      </div>
-      <p class="small">Suggerimento: clicca un riquadro per caricarlo nel form. Gli ID compaiono sopra il nome. Doppio‑click per collassare/espandere i figli.</p>
-    </div>
+    </aside>
 
-    <div class="section">
-      <h2>Dati</h2>
-      <div class="btns">
-        <button id="btnExport">Esporta JSON</button>
-        <button id="btnImport">Importa JSON</button>
-        <button id="btnReset" class="danger">Nuovo albero</button>
-      </div>
-      <div class="btns" style="margin-top:6px">
-        <button id="btnPNG">Scarica PNG</button>
-        <button id="btnFE">Apri in FamilyEcho (24h)</button>
-        <button id="btnFESelf">Apri qui (fallback)</button>
-        <button id="btnFETest">Test API</button>
-        <button id="btnPrint">Stampa / PDF</button>
-        <button id="btnCenter">Centra</button>
-      </div>
-      <div class="btns" style="margin-top:6px">
-        <button id="btnShare">Copia link sola lettura</button>
-        <button id="btnUndo">Annulla</button>
-        <button id="btnRedo">Ripeti</button>
-      </div>
-      <p class="small">Salvataggio automatico su <strong>LocalStorage</strong>. Condivisione tramite URL con dati codificati (solo lettura).</p>
-    </div>
-
-    <div class="section">
-      <h2>Visualizzazione</h2>
-      <div class="toolbar" style="gap:10px">
-        <button id="btnSimple">Modalità semplice: <span id="simpleState">ON</span></button>
-        <span id="zoomLabel" class="badge">100%</span>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <div>
-          <label>Profondità (generazioni sotto la radice)</label>
-          <input id="iDepth" type="number" min="1" max="12" value="4" />
-        </div>
-        <div>
-          <label>Linee coniugi</label>
-          <select id="iSpouseLines"><option value="on" selected>Mostra</option><option value="off">Nascondi</option></select>
-        </div>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <div>
-          <label>Raggruppamento figli</label>
-          <select id="iGrouping"><option value="none">Nessuno</option><option value="surname" selected>Cognome</option><option value="label">Etichetta</option></select>
-        </div>
-        <div>
-          <label>Espansione rami</label>
-          <select id="iExpand"><option value="all" selected>Tutti aperti</option><option value="collapsed">Manuale (consenti collasso)</option></select>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Import/Export GEDCOM</h2>
-      <div class="btns">
-        <button id="btnGedExport">Export .ged</button>
-        <button id="btnGedImport">Import .ged</button>
-      </div>
-      <p class="small">Supporto base: INDI (NAME/SEX/BIRT/DEAT), FAM (HUSB/WIFE/CHIL).</p>
-    </div>
-
-    <div class="section">
-      <h2>Lingua & Tema</h2>
-      <div class="btns">
-        <button id="btnIt">IT</button>
-        <button id="btnEn">EN</button>
-        <button id="btnTheme">Tema chiaro/scuro</button>
-      </div>
-    </div>
-
-    <p class="small">MVP scritto da zero. Nessun codice da FamilyEcho.
-    </p>
-  </aside>
-
-  <main id="stage-wrap">
-    <div id="stage">
-      <svg id="edges" width="6000" height="4000"></svg>
-      <div id="viewport"></div>
-    </div>
+    <section class="canvas-wrap">
+      <div class="workspace" id="workspace"></div>
+      <canvas id="edges" class="canvas" aria-hidden="true"></canvas>
+    </section>
   </main>
 
-  <div id="toast" class="toast" style="display:none"></div>
-
   <script>
-  // ======= Stato =======
-  const state = {
-    people: /** @type {Record<string, Person>} */ ({}),
-    spouses: /** @type {[string,string][]} */ ([]),
-    rootId: null,
-    zoom: 1,
-    offset: {x: 120, y: 120},
-    draggingCanvas: false,
-    dragNodes: false,
-    currentId: null,
-    adoptions: /** @type {[string,string][]} */ ([]), // parent->child adottivo
-    history: [],
-    future: [],
-    theme: 'light',
-    simpleMode: true,
-    collapsed: /** @type {Record<string, boolean>} */ ({}),
-    clarity: { groupBy: 'surname', showSpouseLines: true, depthMax: 4 },
-    search: ''
-  };
+    // Modello Dati ORIGINALE (non copiato):
+    // - Struttura diversa da qualsiasi software proprietario
+    const DB = {
+      people: {},    // id -> { id, name, birth, death, gender, photo, x, y }
+      edges: [],     // { a, b, type: 'parent'|'spouse' }
+      sel: null,
+      nextId: 1,
+      zoom: 1,
+      pan: {x: 0, y: 0},
+    };
 
-  /** @typedef {{id:string, name:string, gender:'m'|'f'|'u', born?:string, death?:string, birthName?:string, notes?:string, color?:string, photo?:string, parents:string[], children:string[], x:number, y:number}} Person */
+    const ws = document.getElementById('workspace');
+    const canvas = document.getElementById('edges');
+    const ctx = canvas.getContext('2d');
 
-  const el = sel => document.querySelector(sel);
-  const viewport = el('#viewport');
-  const edgesSVG = el('#edges');
-  const toast = el('#toast');
+    function resize(){
+      canvas.width = ws.clientWidth;
+      canvas.height = ws.clientHeight;
+      drawEdges();
+    }
+    new ResizeObserver(resize).observe(ws);
 
-  // ======= Utils =======
-  const rid = () => Math.random().toString(36).slice(2,9);
-  const clamp = (n,min,max)=>Math.max(min,Math.min(max,n));
-  function showToast(msg){ toast.textContent = msg; toast.style.display='block'; clearTimeout(showToast._t); showToast._t = setTimeout(()=>toast.style.display='none', 2200); }
-  function setReadOnlyMode(flag){
-    state.viewMode = !!flag;
-    const banner = el('#modeBanner');
-    if(banner){ banner.style.display = flag ? 'block' : 'none'; }
-    // Non disabilitare più i controlli: lasciamo tutto attivo anche in view-mode
-  }
-    document.querySelectorAll('aside button, aside input, aside select, aside textarea').forEach(n=>{
-      if(['btnFE','btnFESelf','btnFETest','btnExitView'].includes(n.id)) { n.disabled=false; }
-      else n.disabled=!!flag;
+    // Helpers
+    const $ = sel => document.querySelector(sel);
+    function newId(){ return String(DB.nextId++); }
+
+    // Crea un nodo persona
+    function makePerson(p){
+      const el = document.createElement('div');
+      el.className = 'node';
+      el.tabIndex = 0;
+      el.dataset.id = p.id;
+      el.style.left = (p.x||0) + 'px';
+      el.style.top  = (p.y||0) + 'px';
+      el.innerHTML = `
+        <div class="row">
+          <div class="photo" aria-hidden="true">${p.photo ? `<img src="${p.photo}" alt="" width="60" height="60"/>` : ''}</div>
+          <div class="grow">
+            <div class="title">${p.name||'Senza nome'}</div>
+            <div class="meta">${p.birth||''}${p.death?` – ${p.death}`:''}</div>
+          </div>
+        </div>
+        <div class="tip">Doppio click per selezionare</div>
+      `;
+
+      // Selezione
+      el.addEventListener('dblclick', ()=> select(p.id));
+
+      // Drag
+      let drag=null;
+      el.addEventListener('pointerdown', e=>{
+        drag = {dx:e.clientX - el.offsetLeft, dy:e.clientY - el.offsetTop};
+        el.setPointerCapture(e.pointerId);
+      });
+      el.addEventListener('pointermove', e=>{
+        if(!drag) return;
+        const x = e.clientX - drag.dx;
+        const y = e.clientY - drag.dy;
+        el.style.left = x+'px';
+        el.style.top = y+'px';
+        const id = el.dataset.id;
+        DB.people[id].x = x; DB.people[id].y = y;
+        drawEdges();
+      });
+      el.addEventListener('pointerup', ()=> drag=null);
+
+      return el;
+    }
+
+    function mountPerson(p){
+      const el = makePerson(p);
+      ws.appendChild(el);
+    }
+
+    function refresh(){
+      ws.innerHTML = '';
+      for(const id in DB.people) mountPerson(DB.people[id]);
+      drawEdges();
+      updateStatus();
+    }
+
+    function drawEdges(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.lineWidth = 2 * DB.zoom;
+      ctx.strokeStyle = 'rgba(43,107,227,.6)';
+      for(const e of DB.edges){
+        const A = DB.people[e.a];
+        const B = DB.people[e.b];
+        if(!A||!B) continue;
+        const a = rectCenter(A), b = rectCenter(B);
+        ctx.beginPath();
+        if(e.type==='spouse'){
+          // collegamento orizzontale con piccolo arco
+          const midX = (a.x + b.x)/2;
+          ctx.moveTo(a.x, a.y);
+          ctx.quadraticCurveTo(midX, a.y-20, b.x, b.y);
+        } else {
+          // parentale: con "braccio" e drop verticale
+          const midX = (a.x + b.x)/2;
+          const yMid = Math.min(a.y,b.y) - 30;
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(midX, yMid);
+          ctx.lineTo(b.x, b.y);
+        }
+        ctx.stroke();
+      }
+    }
+
+    function rectCenter(p){
+      const w=230, h=96; // dimensioni coerenti con CSS
+      return {x: (p.x||0) + w/2, y: (p.y||0) + h/2};
+    }
+
+    function addPerson(partial={}){
+      const id = newId();
+      DB.people[id] = { id, name:'Nuova persona', gender:'u', x: 100 + Math.random()*300, y: 100 + Math.random()*200, ...partial };
+      refresh();
+      return id;
+    }
+
+    function link(a,b,type){
+      DB.edges.push({a,b,type});
+      refresh();
+    }
+
+    function select(id){
+      DB.sel = id;
+      const p = DB.people[id];
+      $('#pName').value = p.name||'';
+      $('#pBirth').value = p.birth||'';
+      $('#pDeath').value = p.death||'';
+      $('#pGender').value = p.gender||'u';
+      $('#pPhoto').value = p.photo||'';
+    }
+
+    function updateStatus(){
+      $('#status').textContent = `Nodi: ${Object.keys(DB.people).length} · Relazioni: ${DB.edges.length}`;
+    }
+
+    // Toolbar
+    $('#btnZoomIn').onclick = ()=> { DB.zoom*=1.1; canvas.style.transform = `scale(${DB.zoom})`; };
+    $('#btnZoomOut').onclick = ()=> { DB.zoom/=1.1; canvas.style.transform = `scale(${DB.zoom})`; };
+    $('#btnCenter').onclick = ()=> { ws.scrollTo({top:0,left:0,behavior:'smooth'}); };
+
+    // Form
+    $('#btnApply').onclick = ()=>{
+      if(!DB.sel) return;
+      const p = DB.people[DB.sel];
+      p.name = $('#pName').value.trim()||'Senza nome';
+      p.birth = $('#pBirth').value.trim();
+      p.death = $('#pDeath').value.trim();
+      p.gender = $('#pGender').value;
+      p.photo = $('#pPhoto').value.trim();
+      refresh();
+    };
+
+    $('#btnAddParent').onclick = ()=>{
+      const id = DB.sel || addPerson();
+      const parent = addPerson({name:'Genitore'});
+      link(parent, id, 'parent');
+    };
+
+    $('#btnAddChild').onclick = ()=>{
+      const id = DB.sel || addPerson();
+      const child = addPerson({name:'Figlio'});
+      link(id, child, 'parent');
+    };
+
+    $('#btnAddSpouse').onclick = ()=>{
+      const id = DB.sel || addPerson();
+      const spouse = addPerson({name:'Partner'});
+      link(id, spouse, 'spouse');
+    };
+
+    $('#btnDelete').onclick = ()=>{
+      if(!DB.sel) return;
+      const id = DB.sel;
+      delete DB.people[id];
+      DB.edges = DB.edges.filter(e => e.a!==id && e.b!==id);
+      DB.sel=null; refresh();
+    };
+
+    // Import/Export JSON (schema proprio)
+    $('#fileInput').addEventListener('change', async (e)=>{
+      const file = e.target.files?.[0];
+      if(!file) return;
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if(!data.people||!data.edges) return alert('JSON non valido');
+      Object.assign(DB, data);
+      refresh();
     });
-  }
 
-  function snapshot(){ state.history.push(JSON.stringify({people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId, offset:state.offset, zoom:state.zoom, collapsed:state.collapsed, clarity:state.clarity})); if(state.history.length>50) state.history.shift(); state.future=[]; }
-  function undo(){ if(!state.history.length) return; const last = state.history.pop(); state.future.push(JSON.stringify({people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId, offset:state.offset, zoom:state.zoom, collapsed:state.collapsed, clarity:state.clarity})); const s = JSON.parse(last); Object.assign(state, s); render(); save(); }
-  function redo(){ if(!state.future.length) return; const next = state.future.pop(); state.history.push(JSON.stringify({people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId, offset:state.offset, zoom:state.zoom, collapsed:state.collapsed, clarity:state.clarity})); const s = JSON.parse(next); Object.assign(state, s); render(); save(); }
+    $('#btnExport').onclick = ()=>{
+      const data = JSON.stringify(DB, null, 2);
+      const blob = new Blob([data], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'geneaview.json'; a.click();
+      URL.revokeObjectURL(url);
+    };
 
-  function save(){ localStorage.setItem('genea.mvp', JSON.stringify({people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId, offset:state.offset, zoom:state.zoom, theme:state.theme, simpleMode:state.simpleMode, collapsed:state.collapsed, clarity:state.clarity})); }
-  function load(){
-    const raw = localStorage.getItem('genea.mvp');
-    if(!raw) return;
-    try{
-      const {people, spouses, adoptions, rootId, offset, zoom, theme, simpleMode, collapsed, clarity} = JSON.parse(raw);
-      state.people = people||{}; state.spouses = spouses||[]; state.adoptions = adoptions||[]; state.rootId = rootId||null; state.offset = offset||{x:120,y:120}; state.zoom = zoom||1; state.theme = theme||'light'; state.simpleMode = simpleMode!==undefined? simpleMode : true; state.collapsed = collapsed||{}; state.clarity = clarity||state.clarity;
-    }catch(e){ console.warn('Bad save'); }
-  }
+    // Seed iniziale
+    const a = addPerson({name:'Nonno', birth:'1945', x:200, y:120});
+    const b = addPerson({name:'Nonna', birth:'1948', x:500, y:120});
+    link(a,b,'spouse');
+    const c = addPerson({name:'Padre', birth:'1975', x:350, y:260});
+    link(a,c,'parent'); link(b,c,'parent');
+    const d = addPerson({name:'Figlio', birth:'2005', x:350, y:420});
+    link(c,d,'parent');
 
-  // ======= Layout gerarchico tidy =======
-  function layout(){
-    const simple = state.simpleMode===undefined ? true : state.simpleMode;
-    const dx = simple? 260 : 220, dy = simple? 190 : 160;
+    // Prima selezione
+    select(c);
 
-    if(!state.rootId || !state.people[state.rootId]){ render(); save(); return; }
-
-    const visited = new Set();
-    function build(nodeId, depth=0){
-      if(!state.people[nodeId] || visited.has(nodeId)) return null;
-      visited.add(nodeId);
-      const P = state.people[nodeId];
-
-      // partner principale (quello con più figli in comune)
-      let partner = null, maxKids = -1;
-      for(const [a,b] of state.spouses){
-        const other = (a===nodeId? b : b===nodeId? a : null); if(!other) continue;
-        const kids = Object.values(state.people).filter(c=> c.parents.includes(nodeId) && c.parents.includes(other));
-        if(kids.length>maxKids){ maxKids=kids.length; partner = other; }
-      }
-      const couple = partner? [nodeId, partner] : [nodeId];
-
-      // figli
-      let children=[];
-      if(partner){ children = Object.values(state.people).filter(c=> c.parents.includes(nodeId) && c.parents.includes(partner)).map(c=>c.id); }
-      else { children = [...P.children]; }
-
-      // collasso o profondità
-      if(state.collapsed[nodeId] || depth>=state.clarity.depthMax) children = [];
-
-      // chiave di raggruppamento
-      const keyOf = (pid)=>{
-        const pp = state.people[pid];
-        if(state.clarity.groupBy==='label' && pp.color && !pp.color.startsWith('#')) return pp.color.toUpperCase();
-        const parts = (pp.name||'').trim().split(/\s+/); return (parts.pop()||'').toUpperCase();
-      };
-      children.sort((a,b)=> keyOf(a).localeCompare(keyOf(b)) || (state.people[a].name||'').localeCompare(state.people[b].name||''));
-
-      return { id: nodeId, couple, children: children.map(c=>build(c, depth+1)).filter(Boolean) };
-    }
-
-    const tree = build(state.rootId, 0);
-
-    let nextX = 0;
-    function assign(node, depth){
-      node.depth = depth;
-      if(!node.children.length){ node.x = nextX; nextX += 1; }
-      else { node.children.forEach(ch=>assign(ch, depth+1)); node.x = (node.children[0].x + node.children[node.children.length-1].x)/2; }
-      node.couple.forEach((pid,idx)=>{ const p = state.people[pid]; p.x = node.x*dx + (idx===0? -40 : +40); p.y = depth*dy; });
-    }
-    if(tree) assign(tree, 0);
-
-    render(); save();
-  }
-
-  // ======= Render =======
-  function pathElbow(x1,y1,x2,y2, cls='edge'){
-    const P = document.createElementNS('http://www.w3.org/2000/svg','path');
-    const midY = (y1 + y2)/2; // gomito ortogonale
-    const d = `M ${x1+state.offset.x} ${y1+state.offset.y} L ${x1+state.offset.x} ${midY+state.offset.y} L ${x2+state.offset.x} ${midY+state.offset.y} L ${x2+state.offset.x} ${y2+state.offset.y}`;
-    P.setAttribute('d', d); P.setAttribute('class', cls); P.setAttribute('fill','none'); edgesSVG.appendChild(P);
-  }
-
-  function render(){
-    viewport.innerHTML=''; edgesSVG.innerHTML=''; const frag = document.createDocumentFragment();
-
-    // sposi (opzionale)
-    if(state.clarity.showSpouseLines){
-      for(const [a,b] of state.spouses){
-        const A=state.people[a], B=state.people[b]; if(!A||!B) continue;
-        const y = (A.y+B.y)/2 + 40; const x1 = A.x+100, x2 = B.x+80;
-        const L = document.createElementNS('http://www.w3.org/2000/svg','line');
-        L.setAttribute('x1', x1+state.offset.x); L.setAttribute('y1', y+state.offset.y);
-        L.setAttribute('x2', x2+state.offset.x); L.setAttribute('y2', y+state.offset.y);
-        L.setAttribute('class','edge spouse'); edgesSVG.appendChild(L);
-      }
-    }
-
-    // genitori→figli
-    for(const id in state.people){
-      const p = state.people[id];
-      for(const c of p.children){
-        const child = state.people[c]; if(!child) continue;
-        const cls = state.adoptions.find(([pa,ch])=>pa===id && ch===c) ? 'edge adopt' : 'edge';
-        pathElbow(p.x+100, p.y+84, child.x+100, child.y, cls);
-      }
-    }
-
-    // nodi
-    for(const id in state.people){
-      const p = state.people[id];
-      const card = document.createElement('div'); card.className='person'; card.style.left = (p.x + state.offset.x) + 'px'; card.style.top  = (p.y + state.offset.y) + 'px'; card.dataset.id = id; if(p.color && p.color.startsWith('#')){ card.style.borderColor=p.color; }
-
-      const head = document.createElement('div'); head.className='rowFlex';
-      const ph = document.createElement('img'); ph.className='photo'; ph.src=p.photo||''; ph.alt='';
-      const txt = document.createElement('div');
-      const idBadge = document.createElement('div'); idBadge.className='badge'; idBadge.textContent = 'ID: '+id;
-      const nm = document.createElement('div'); nm.className='name'; nm.textContent=p.name||'(senzanome)';
-      const gSym = p.gender==='m' ? '♂' : p.gender==='f' ? '♀' : '⚪';
-      const meta = document.createElement('div'); meta.className='meta'; meta.textContent = `${gSym}${p.born?(' · n. '+p.born):''}${p.death?(' · † '+p.death):''}${p.birthName?(' · nato/a '+p.birthName):''}${(p.color && !p.color.startsWith('#'))?(' · '+p.color):''}`;
-      txt.appendChild(idBadge); txt.appendChild(nm); txt.appendChild(meta);
-      head.appendChild(ph); head.appendChild(txt); card.appendChild(head);
-      if(p.notes){ const notes = document.createElement('div'); notes.className='meta'; notes.textContent=p.notes; card.appendChild(notes); }
-
-      card.addEventListener('click', ev=>{ ev.stopPropagation(); state.currentId=id; fillForm(p); el('#iRelA').value=id; highlight(id); });
-      card.addEventListener('dblclick', ev=>{ ev.stopPropagation(); state.collapsed[id] = !state.collapsed[id]; layout(); save(); });
-
-      // pulsante collasso UI
-      const cc = document.createElement('button'); cc.className='collapse-btn'; cc.textContent = state.collapsed[id] ? '+' : '−'; cc.title = state.collapsed[id] ? 'Espandi figli' : 'Collassa figli';
-      cc.addEventListener('click', e=>{ e.stopPropagation(); state.collapsed[id]=!state.collapsed[id]; layout(); save(); }); card.appendChild(cc);
-
-      frag.appendChild(card);
-    }
-
-    viewport.appendChild(frag);
-
-    // evidenziazione ricerca
-    const q = (state.search||'').trim().toLowerCase();
-    if(q){
-      const matches = new Set(Object.keys(state.people).filter(id=> (state.people[id].name||'').toLowerCase().includes(q) || ('id:'+id).includes(q)));
-      const neigh = new Set();
-      for(const id of matches){ const p=state.people[id]; p.parents.forEach(x=>neigh.add(x)); p.children.forEach(x=>neigh.add(x)); state.spouses.forEach(([a,b])=>{ if(a===id) neigh.add(b); if(b===id) neigh.add(a);}); }
-      document.querySelectorAll('.person').forEach(node=>{ const pid=node.dataset.id; if(!(matches.has(pid)||neigh.has(pid))) node.classList.add('dim'); else node.classList.remove('dim'); });
-    } else { document.querySelectorAll('.person').forEach(n=>n.classList.remove('dim')); }
-
-    el('#zoomLabel').textContent = Math.round(state.zoom*100)+'%';
-    el('#stage').style.transform = `scale(${state.zoom})`;
-  }
-
-  function highlight(id){
-    document.querySelectorAll('.person').forEach(n=>n.style.outline='none');
-    const card = document.querySelector(`.person[data-id="${id}"]`);
-    if(card) card.style.outline='2px solid var(--accent)';
-  }
-
-  // ======= CRUD =======
-  function upsertPerson({id, name, gender, born, death, birthName, notes, color, photo}){
-    snapshot(); if(!id) id = rid(); const prev = state.people[id];
-    state.people[id] = { id, name: name || (prev?.name)||'', gender: gender|| prev?.gender || 'u', born: born || prev?.born || '', death: death || prev?.death || '', birthName: birthName || prev?.birthName || '', notes: notes || prev?.notes || '', color: color || prev?.color || '', photo: photo || prev?.photo || '', parents: prev?.parents || [], children: prev?.children || [], x: prev?.x ?? 0, y: prev?.y ?? 0 };
-    if(!state.rootId) state.rootId = id; layout(); showToast(`Salvato: ${state.people[id].name} (ID ${id})`); return id;
-  }
-
-  function deletePerson(id){
-    snapshot(); if(!state.people[id]) return;
-    for(const pid in state.people){ const p=state.people[pid]; p.parents = p.parents.filter(x=>x!==id); p.children = p.children.filter(x=>x!==id); }
-    state.spouses = state.spouses.filter(([a,b])=>a!==id && b!==id); state.adoptions = state.adoptions.filter(([a,b])=>a!==id && b!==id); delete state.people[id];
-    if(state.rootId===id) state.rootId = Object.keys(state.people)[0]||null; if(state.currentId===id) state.currentId=null; render(); save();
-  }
-
-  function addSpouses(a,b){ if(a&&b&&a!==b){ if(!state.spouses.find(([x,y])=>(x===a&&y===b)||(x===b&&y===a))) { snapshot(); state.spouses.push([a,b]); layout(); } } }
-  function linkParentChild(parent, child, adopted=false){ if(parent && child && parent!==child){ const P=state.people[parent], C=state.people[child]; if(!P||!C) return; if(!P.children.includes(child)) P.children.push(child); if(!C.parents.includes(parent)) C.parents.push(parent); if(adopted && !state.adoptions.find(([pa,ch])=>pa===parent&&ch===child)) state.adoptions.push([parent,child]); layout(); }}
-
-  // ======= Form/UI =======
-  function fillForm(p){ el('#iName').value=p.name; el('#iGender').value=p.gender; el('#iBorn').value=p.born||''; el('#iDeath').value=p.death||''; el('#iBirthName').value=p.birthName||''; el('#iNotes').value=p.notes||''; el('#iPhoto').value=p.photo||''; el('#iColor').value=p.color||''; }
-  function clearForm(){ el('#iName').value=''; el('#iBorn').value=''; el('#iDeath').value=''; el('#iBirthName').value=''; el('#iNotes').value=''; el('#iPhoto').value=''; el('#iColor').value=''; el('#iGender').value='u'; }
-
-  el('#btnAdd').addEventListener('click', ()=>{ const payload = { id: state.currentId, name: el('#iName').value.trim(), gender: el('#iGender').value, born: el('#iBorn').value.trim(), death: el('#iDeath').value.trim(), birthName: el('#iBirthName').value.trim(), notes: el('#iNotes').value.trim(), photo: el('#iPhoto').value.trim(), color: el('#iColor').value.trim() }; const id = upsertPerson(payload); state.currentId=id; el('#iRelA').value=id; });
-  el('#btnClear').addEventListener('click', ()=>{ state.currentId=null; clearForm();});
-  el('#btnDelete').addEventListener('click', ()=>{ if(state.currentId && confirm('Eliminare la persona selezionata?')) deletePerson(state.currentId); });
-  el('#btnSetRoot').addEventListener('click', ()=>{ if(state.currentId){ state.rootId=state.currentId; layout(); showToast('Impostata radice su '+state.people[state.rootId].name); }});
-
-  el('#btnSpouse').addEventListener('click', ()=>{ addSpouses(el('#iRelA').value.trim(), el('#iRelB').value.trim()); });
-  el('#btnParent').addEventListener('click', ()=>{ linkParentChild(el('#iRelA').value.trim(), el('#iRelB').value.trim(), false); });
-  el('#btnAdopt').addEventListener('click', ()=>{ linkParentChild(el('#iRelA').value.trim(), el('#iRelB').value.trim(), true); });
-
-  // Import/Export JSON
-  el('#btnExport').addEventListener('click', ()=>{ const data = { version:3, exportedAt:new Date().toISOString(), people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId }; const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'}); const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='genea-tree.json'; a.click(); URL.revokeObjectURL(a.href); });
-  el('#btnImport').addEventListener('click', ()=>{ const inp = document.createElement('input'); inp.type='file'; inp.accept='.json,application/json'; inp.onchange = ()=>{ const f = inp.files[0]; if(!f) return; const rd=new FileReader(); rd.onload = ()=>{ try{ const data = JSON.parse(String(rd.result)); if(!data.people) throw new Error('formato non valido'); snapshot(); state.people = data.people; state.spouses = data.spouses||[]; state.adoptions = data.adoptions||[]; state.rootId = data.rootId||Object.keys(state.people)[0]||null; layout(); showToast('Import completato'); } catch(e){ alert('JSON non valido: '+e.message); } }; rd.readAsText(f); }; inp.click(); });
-  el('#btnReset').addEventListener('click', ()=>{ if(confirm('Sicuro? Verrà creato un nuovo albero vuoto.')){ snapshot(); state.people={}; state.spouses=[]; state.adoptions=[]; state.rootId=null; state.currentId=null; save(); render(); }});
-
-  // Pan & Zoom (ridotto: disabilitato in modalità semplice)
-  function applyZoom(z){ if(state.simpleMode) return; state.zoom = clamp(z, .5, 2); el('#zoomLabel').textContent=Math.round(state.zoom*100)+'%'; el('#stage').style.transform=`scale(${state.zoom})`; save(); }
-  el('#btnCenter').addEventListener('click', ()=>{ state.offset={x:120,y:120}; state.zoom=1; render(); });
-
-  // PNG export
-  async function toPNG(){
-    const {width,height} = edgesSVG.getBoundingClientRect();
-    const canvas = document.createElement('canvas'); canvas.width=width; canvas.height=height; const ctx=canvas.getContext('2d');
-    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg'); ctx.fillRect(0,0,width,height);
-    // lines
-    ctx.strokeStyle = '#c5cfdd'; ctx.lineWidth=2;
-    document.querySelectorAll('path.edge, line.edge').forEach(E=>{ const p = new Path2D(E.getAttribute('d')||''); if(E.tagName==='LINE'){ ctx.beginPath(); ctx.moveTo(+E.getAttribute('x1'), +E.getAttribute('y1')); ctx.lineTo(+E.getAttribute('x2'), +E.getAttribute('y2')); ctx.stroke(); } else { ctx.stroke(p);} });
-    // nodes (rettangoli + nome)
-    document.querySelectorAll('.person').forEach(card=>{ const r = card.getBoundingClientRect(); const base = edgesSVG.getBoundingClientRect(); const x = r.left - base.left; const y = r.top - base.top; const w = r.width, h = r.height; const br = 14; roundRect(ctx,x,y,w,h,br,true,true); ctx.fillStyle = '#0e1321'; ctx.font='700 15px system-ui'; ctx.fillText(card.querySelector('.name').textContent, x+10, y+22); ctx.fillStyle = '#55607a'; ctx.font='12px system-ui'; ctx.fillText(card.querySelector('.meta').textContent, x+10, y+40); });
-    const link = document.createElement('a'); link.download='genea-tree.png'; link.href=canvas.toDataURL('image/png'); link.click();
-  }
-  function roundRect(ctx, x, y, width, height, radius, fill, stroke) { if (typeof radius === 'number') { radius = {tl: radius, tr: radius, br: radius, bl: radius}; } ctx.beginPath(); ctx.moveTo(x + radius.tl, y); ctx.lineTo(x + width - radius.tr, y); ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr); ctx.lineTo(x + width, y + height - radius.br); ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height); ctx.lineTo(x + radius.bl, y + height); ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl); ctx.lineTo(x, y + radius.tl); ctx.quadraticCurveTo(x, y, x + radius.tl, y); ctx.closePath(); if (fill){ ctx.fillStyle='#ffffff'; ctx.fill(); } if (stroke){ ctx.strokeStyle='#d8dee9'; ctx.lineWidth=1; ctx.stroke(); } }
-  el('#btnPNG').addEventListener('click', toPNG);
-  el('#btnPrint').addEventListener('click', ()=>window.print());
-
-  // ======= Condivisione: URL sola lettura =======
-  el('#btnShare').addEventListener('click', ()=>{ const data = {people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId}; const enc = btoa(unescape(encodeURIComponent(JSON.stringify(data)))); const url = location.origin + location.pathname + '#view=' + enc; navigator.clipboard.writeText(url).then(()=>showToast('Link copiato negli appunti (sola lettura)')); });
-  function tryViewFromHash(){
-    const m = location.hash.match(/#view=([A-Za-z0-9+/=]+)/);
-    if(!m) return false;
-    const json = decodeURIComponent(escape(atob(m[1])));
-    const data = JSON.parse(json);
-    state.people = data.people||{}; state.spouses=data.spouses||[]; state.adoptions=data.adoptions||[]; state.rootId=data.rootId||null;
-    render();
-    setReadOnlyMode(true);
-    showToast('Visualizzazione sola lettura');
-    return true;
-  }
-
-  // ======= GEDCOM (supporto base) =======
-  function buildGEDCOM(){
-    let out = '0 HEAD
-1 SOUR GeneaMVP
-1 GEDC
-2 VERS 5.5.1
-1 CHAR UTF-8
-';
-    const idMap = {}; let idx=1; Object.keys(state.people).forEach(pid=> idMap[pid]='I'+(idx++));
-    for(const pid of Object.keys(state.people)){
-      const p = state.people[pid]; const gid=idMap[pid];
-      out += `0 @${gid}@ INDI
-`;
-      if(p.name){ const parts=p.name.split(' '); const sur=parts.pop()||''; const giv=parts.join(' '); out += `1 NAME ${giv} /${sur}/
-`; }
-      if(p.gender){ out += `1 SEX ${p.gender==='m'?'M':p.gender==='f'?'F':'U'}
-`; }
-      if(p.born){ out += `1 BIRT
-2 DATE ${p.born}
-`; }
-      if(p.death){ out += `1 DEAT
-2 DATE ${p.death}
-`; }
-    }
-    let fidx=1; const fams=[];
-    for(const [a,b] of state.spouses){ const kids = Object.keys(state.people).filter(cid=> state.people[cid].parents.includes(a) && state.people[cid].parents.includes(b)); fams.push({a,b,kids}); }
-    fams.forEach(f=>{ const fid='F'+(fidx++); out += `0 @${fid}@ FAM
-`; if(idMap[f.a]) out += `1 HUSB @${idMap[f.a]}@
-`; if(idMap[f.b]) out += `1 WIFE @${idMap[f.b]}@
-`; f.kids.forEach(k=> out += `1 CHIL @${idMap[k]}@
-`); });
-    out += '0 TRLR
-';
-    return { gedcom: out, idMap };
-  }
-  function gedExport(){
-    const {gedcom: out} = buildGEDCOM();
-    const blob = new Blob([out], {type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='genea-tree.ged'; a.click(); URL.revokeObjectURL(a.href);
-  }
-  el('#btnGedExport').addEventListener('click', gedExport);
-  // FamilyEcho preview (24h)
-  function openInFamilyEcho(targetMode='popup'){
-    try{
-      if(!Object.keys(state.people).length){ showToast('Nessun dato da inviare'); return; }
-      const {gedcom, idMap} = buildGEDCOM();
-      const params = { operation:'temp_view', format:'redirect', family: gedcom, hide_header:'1', hide_sidebar:'1', hide_navbar:'1', background_color:'ffffff' };
-      if(state.rootId && idMap[state.rootId]) params.focus = '@'+idMap[state.rootId]+'@';
-
-      const form = document.createElement('form');
-      form.method='POST';
-      form.action='https://www.familyecho.com/api/';
-
-      if(targetMode==='popup'){
-        const win = window.open('', 'fe_preview');
-        if(!win){ alert('Il browser ha bloccato la nuova scheda. Consenti i pop‑up per questo sito e riprova, oppure usa "Apri qui (fallback)".'); return; }
-        form.target='fe_preview';
-      } else {
-        form.target='_self'; // naviga nella stessa scheda, niente blocco popup
-      }
-
-      for(const k in params){ const inp=document.createElement('input'); inp.type='hidden'; inp.name=k; inp.value=params[k]; form.appendChild(inp); }
-      document.body.appendChild(form);
-      form.submit();
-      setTimeout(()=>form.remove(), 0);
-      if(targetMode==='popup') showToast('Anteprima FamilyEcho aperta in una nuova scheda.');
-    }catch(e){ console.error(e); alert('Impossibile aprire FamilyEcho: '+e.message); }
-  }
-
-  function openTestInFamilyEcho(targetMode='popup'){
-    // GEDCOM minimo di diagnostica: 1 persona
-    const sample = [
-      '0 HEAD','1 SOUR GeneaMVP','1 GEDC','2 VERS 5.5.1','1 CHAR UTF-8',
-      '0 @I1@ INDI','1 NAME Test /Persona/','1 SEX U','0 TRLR'
-    ].join('
-');
-
-    const params = { operation:'temp_view', format:'redirect', family: sample, hide_header:'1', hide_sidebar:'1', hide_navbar:'1', background_color:'ffffff', focus:'@I1@' };
-    const form = document.createElement('form');
-    form.method='POST'; form.action='https://www.familyecho.com/api/';
-    if(targetMode==='popup'){
-      const win = window.open('', 'fe_preview');
-      if(!win){ alert('Popup bloccato. Usa "Apri qui (fallback)".'); return; }
-      form.target='fe_preview';
-    } else { form.target='_self'; }
-    for(const k in params){ const inp=document.createElement('input'); inp.type='hidden'; inp.name=k; inp.value=params[k]; form.appendChild(inp); }
-    document.body.appendChild(form); form.submit(); setTimeout(()=>form.remove(), 0);
-  }
-      const {gedcom, idMap} = buildGEDCOM();
-      // apri PRIMA una scheda nominata (evita block popup), poi invia il POST a quella scheda
-      const win = window.open('', 'fe_preview');
-      if(!win){ alert('Il browser ha bloccato l\'apertura della nuova scheda. Consenti i pop‑up per questo sito e riprova.'); return; }
-      const form = document.createElement('form');
-      form.method='POST';
-      form.action='https://www.familyecho.com/api/';
-      form.target='fe_preview';
-      const params = { operation:'temp_view', format:'redirect', family: gedcom, hide_header:'1', hide_sidebar:'1', hide_navbar:'1', background_color:'ffffff' };
-      if(state.rootId && idMap[state.rootId]) params.focus = '@'+idMap[state.rootId]+'@';
-      for(const k in params){ const inp=document.createElement('input'); inp.type='hidden'; inp.name=k; inp.value=params[k]; form.appendChild(inp); }
-      document.body.appendChild(form);
-      form.submit();
-      setTimeout(()=>form.remove(), 0);
-      showToast('Anteprima FamilyEcho aperta nella nuova scheda.');
-    }catch(e){ console.error(e); alert('Impossibile aprire FamilyEcho: '+e.message); }
-  }
-      const {gedcom, idMap} = buildGEDCOM();
-      const form = document.createElement('form'); form.method='POST'; form.action='https://www.familyecho.com/api/'; form.target='_blank'; form.rel='noopener';
-      const params = { operation:'temp_view', format:'redirect', family: gedcom, hide_header:'1', hide_sidebar:'1', hide_navbar:'1', background_color:'ffffff' };
-      // focus sulla radice se disponibile
-      if(state.rootId && idMap[state.rootId]) params.focus = '@'+idMap[state.rootId]+'@';
-      for(const k in params){ const inp=document.createElement('input'); inp.type='hidden'; inp.name=k; inp.value=params[k]; form.appendChild(inp); }
-      document.body.appendChild(form);
-      showToast('Apro l\'anteprima FamilyEcho in una nuova scheda…');
-      form.submit();
-      setTimeout(()=>form.remove(), 0);
-    }catch(e){ console.error(e); alert('Impossibile aprire FamilyEcho: '+e.message); }
-  }
-  el('#btnFE').addEventListener('click', ()=>openInFamilyEcho('popup'));
-  el('#btnFESelf').addEventListener('click', ()=>openInFamilyEcho('self'));
-  el('#btnFETest').addEventListener('click', ()=>openTestInFamilyEcho('popup'));
-  function gedImport(){ const inp = document.createElement('input'); inp.type='file'; inp.accept='.ged,text/plain'; inp.onchange=()=>{ const f = inp.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ try{ snapshot(); const lines=String(rd.result).split(/\r?\n/); const indi={}, fams=[]; let cur=null, curFam=null; for(const ln of lines){ const m = ln.match(/^(\d+)\s+(?:@([^@]+)@\s+)?(\w+)(?:\s+(.*))?$/); if(!m) continue; const lvl=+m[1], id=m[2], tag=m[3], val=m[4]||''; if(lvl===0 && tag==='INDI'){ cur = id; indi[cur]={name:'', sex:'U', birt:'', deat:''}; } else if(lvl===0 && tag==='FAM'){ curFam = {husb:null, wife:null, chil:[]}; fams.push({id, ...curFam}); curFam = fams[fams.length-1]; } else if(cur){ if(tag==='NAME'&&lvl===1){ indi[cur].name=val.replace(/\/(.*?)\//, (m)=>m.slice(1,-1)); } if(tag==='SEX'&&lvl===1){ indi[cur].sex=val; } if(tag==='BIRT'&&lvl===1){ indi[cur]._ctx='BIRT'; } if(tag==='DEAT'&&lvl===1){ indi[cur]._ctx='DEAT'; } if(tag==='DATE'&&lvl===2){ if(indi[cur]._ctx==='BIRT') indi[cur].birt=val; if(indi[cur]._ctx==='DEAT') indi[cur].deat=val; } } else if(curFam){ if(tag==='HUSB'&&lvl===1) curFam.husb=val.replace(/@/g,''); if(tag==='WIFE'&&lvl===1) curFam.wife=val.replace(/@/g,''); if(tag==='CHIL'&&lvl===1) curFam.chil.push(val.replace(/@/g,'')); } } const map={}; for(const gid in indi){ const data=indi[gid]; const id=rid(); map[gid]=id; state.people[id]={id, name:data.name||'', gender:data.sex==='M'?'m':data.sex==='F'?'f':'u', born:data.birt||'', death:data.deat||'', parents:[], children:[], x:0, y:0}; } fams.forEach(F=>{ const a=map[F.husb], b=map[F.wife]; if(a&&b) state.spouses.push([a,b]); F.chil.forEach(cg=>{ const c=map[cg]; if(c&&a) linkParentChild(a,c,false); if(c&&b) linkParentChild(b,c,false); }); }); layout(); showToast('GEDCOM importato'); }catch(e){ alert('GEDCOM non valido: '+e.message); } }; rd.readAsText(f); }; inp.click(); }
-  el('#btnGedImport').addEventListener('click', gedImport);
-
-  // ======= Boot =======
-  load();
-  if(!tryViewFromHash()){
-    if(Object.keys(state.people).length===0){ const a = upsertPerson({name:'Tu', gender:'u', born:'', photo:''}); state.currentId = a; el('#iRelA').value=a; highlight(a); save(); } else { render(); }
-  }
-
-  // Banner: esci da sola lettura
-  const exitBtn = el('#btnExitView');
-  if(exitBtn){ exitBtn.addEventListener('click', ()=>{ history.replaceState(null,'', location.pathname); setReadOnlyMode(false); showToast('Modalità modifica attivata'); }); }
-
-  // Visualizzazione & Ricerca controlli
-  el('#btnSimple').addEventListener('click', ()=>{ state.simpleMode = !state.simpleMode; el('#simpleState').textContent = state.simpleMode?'ON':'OFF'; render(); save(); });
-  el('#iDepth').addEventListener('change', ()=>{ state.clarity.depthMax = Math.max(1, Math.min(12, +el('#iDepth').value||4)); layout(); save(); });
-  el('#iSpouseLines').addEventListener('change', ()=>{ state.clarity.showSpouseLines = (el('#iSpouseLines').value==='on'); render(); save(); });
-  el('#iGrouping').addEventListener('change', ()=>{ state.clarity.groupBy = el('#iGrouping').value; layout(); save(); });
-  el('#iExpand').addEventListener('change', ()=>{ if(el('#iExpand').value==='all'){ state.collapsed={}; } render(); save(); });
-  el('#iSearch').addEventListener('input', ()=>{ state.search = el('#iSearch').value; render(); });
-  el('#btnClearSearch').addEventListener('click', ()=>{ el('#iSearch').value=''; state.search=''; render(); });
-
-  // Undo/Redo
-  el('#btnUndo').addEventListener('click', undo);
-  el('#btnRedo').addEventListener('click', redo);
-
-  // Lingua & Tema (placeholder semplice)
-  el('#btnIt').addEventListener('click', ()=>showToast('Lingua IT attiva'));
-  el('#btnEn').addEventListener('click', ()=>showToast('Language EN (labels not translated yet)'));
-  el('#btnTheme').addEventListener('click', ()=>{ if(state.theme==='light'){ document.documentElement.style.setProperty('--bg','#0b1020'); document.documentElement.style.setProperty('--panel','#0f1630'); document.documentElement.style.setProperty('--ink','#e9edf8'); document.documentElement.style.setProperty('--muted','#b4c0e0'); document.documentElement.style.setProperty('--grid','#1a2348'); document.documentElement.style.setProperty('--node','#151f42'); document.documentElement.style.setProperty('--node-border','#2b3a7a'); state.theme='dark'; } else { location.reload(); state.theme='light'; } save(); });
-
-  // Diagnostica errori JS a schermo
-  // Dispatcher globale "failsafe" per tutti i bottoni
-  function __dispatchButton(id){
-    try{
-      switch(id){
-        case 'btnAdd': {
-          const payload = { id: state.currentId, name: el('#iName').value.trim(), gender: el('#iGender').value, born: el('#iBorn').value.trim(), death: el('#iDeath').value.trim(), birthName: el('#iBirthName').value.trim(), notes: el('#iNotes').value.trim(), photo: el('#iPhoto').value.trim(), color: el('#iColor').value.trim() };
-          const nid = upsertPerson(payload); state.currentId=nid; el('#iRelA').value=nid; break; }
-        case 'btnClear': state.currentId=null; clearForm(); break;
-        case 'btnDelete': if(state.currentId && confirm('Eliminare la persona selezionata?')) deletePerson(state.currentId); break;
-        case 'btnSetRoot': if(state.currentId){ state.rootId=state.currentId; layout(); showToast('Impostata radice su '+state.people[state.rootId].name); } break;
-        case 'btnSpouse': addSpouses(el('#iRelA').value.trim(), el('#iRelB').value.trim()); break;
-        case 'btnParent': linkParentChild(el('#iRelA').value.trim(), el('#iRelB').value.trim(), false); break;
-        case 'btnAdopt': linkParentChild(el('#iRelA').value.trim(), el('#iRelB').value.trim(), true); break;
-        case 'btnExport': {
-          const data = { version:3, exportedAt:new Date().toISOString(), people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId };
-          const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-          const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='genea-tree.json'; a.click(); URL.revokeObjectURL(a.href); break; }
-        case 'btnImport': {
-          const inp = document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
-          inp.onchange = ()=>{ const f = inp.files[0]; if(!f) return; const rd=new FileReader(); rd.onload = ()=>{ try{ const data = JSON.parse(String(rd.result)); if(!data.people) throw new Error('formato non valido'); snapshot(); state.people = data.people; state.spouses = data.spouses||[]; state.adoptions = data.adoptions||[]; state.rootId = data.rootId||Object.keys(state.people)[0]||null; layout(); showToast('Import completato'); } catch(e){ alert('JSON non valido: '+e.message); } }; rd.readAsText(f); };
-          inp.click(); break; }
-        case 'btnReset': if(confirm('Sicuro? Verrà creato un nuovo albero vuoto.')){ snapshot(); state.people={}; state.spouses=[]; state.adoptions=[]; state.rootId=null; state.currentId=null; save(); render(); } break;
-        case 'btnPNG': toPNG(); break;
-        case 'btnPrint': window.print(); break;
-        case 'btnCenter': state.offset={x:120,y:120}; state.zoom=1; render(); break;
-        case 'btnShare': {
-          const data = {people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId};
-          const enc = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
-          const url = location.origin + location.pathname + '#view=' + enc;
-          navigator.clipboard.writeText(url).then(()=>showToast('Link copiato negli appunti (sola lettura)'));
-          break; }
-        case 'btnUndo': undo(); break;
-        case 'btnRedo': redo(); break;
-        case 'btnGedExport': gedExport(); break;
-        case 'btnGedImport': gedImport(); break;
-        case 'btnFE': openInFamilyEcho('popup'); break;
-        case 'btnFESelf': openInFamilyEcho('self'); break;
-        case 'btnFETest': openTestInFamilyEcho('popup'); break;
-        case 'btnSimple': state.simpleMode = !state.simpleMode; el('#simpleState').textContent = state.simpleMode?'ON':'OFF'; render(); save(); break;
-        case 'btnExitView': history.replaceState(null,'', location.pathname); setReadOnlyMode(false); showToast('Modalità modifica attivata'); break;
-      }
-    }catch(err){ console.error(err); showToast('Errore: '+err.message); }
-  }
-
-  document.addEventListener('click', (ev)=>{
-    const b = ev.target.closest('button');
-    if(!b) return;
-    const ids = ['btnAdd','btnClear','btnDelete','btnSetRoot','btnSpouse','btnParent','btnAdopt','btnExport','btnImport','btnReset','btnPNG','btnPrint','btnCenter','btnShare','btnUndo','btnRedo','btnGedExport','btnGedImport','btnFE','btnFESelf','btnFETest','btnSimple','btnExitView'];
-    if(ids.includes(b.id)){
-      ev.preventDefault();
-      __dispatchButton(b.id);
-    }
-  });
-
-  window.addEventListener('error', (e)=>{ console.error('JS error:', e.message); showToast('Errore JS: '+ e.message); });
+    // Prima render
+    resize();
   </script>
 </body>
 </html>
