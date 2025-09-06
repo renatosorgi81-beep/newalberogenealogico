@@ -254,6 +254,8 @@
     state.viewMode = !!flag;
     const banner = el('#modeBanner');
     if(banner){ banner.style.display = flag ? 'block' : 'none'; }
+    // Non disabilitare più i controlli: lasciamo tutto attivo anche in view-mode
+  }
     document.querySelectorAll('aside button, aside input, aside select, aside textarea').forEach(n=>{
       if(['btnFE','btnFESelf','btnFETest','btnExitView'].includes(n.id)) { n.disabled=false; }
       else n.disabled=!!flag;
@@ -629,6 +631,60 @@
   el('#btnTheme').addEventListener('click', ()=>{ if(state.theme==='light'){ document.documentElement.style.setProperty('--bg','#0b1020'); document.documentElement.style.setProperty('--panel','#0f1630'); document.documentElement.style.setProperty('--ink','#e9edf8'); document.documentElement.style.setProperty('--muted','#b4c0e0'); document.documentElement.style.setProperty('--grid','#1a2348'); document.documentElement.style.setProperty('--node','#151f42'); document.documentElement.style.setProperty('--node-border','#2b3a7a'); state.theme='dark'; } else { location.reload(); state.theme='light'; } save(); });
 
   // Diagnostica errori JS a schermo
+  // Dispatcher globale "failsafe" per tutti i bottoni
+  function __dispatchButton(id){
+    try{
+      switch(id){
+        case 'btnAdd': {
+          const payload = { id: state.currentId, name: el('#iName').value.trim(), gender: el('#iGender').value, born: el('#iBorn').value.trim(), death: el('#iDeath').value.trim(), birthName: el('#iBirthName').value.trim(), notes: el('#iNotes').value.trim(), photo: el('#iPhoto').value.trim(), color: el('#iColor').value.trim() };
+          const nid = upsertPerson(payload); state.currentId=nid; el('#iRelA').value=nid; break; }
+        case 'btnClear': state.currentId=null; clearForm(); break;
+        case 'btnDelete': if(state.currentId && confirm('Eliminare la persona selezionata?')) deletePerson(state.currentId); break;
+        case 'btnSetRoot': if(state.currentId){ state.rootId=state.currentId; layout(); showToast('Impostata radice su '+state.people[state.rootId].name); } break;
+        case 'btnSpouse': addSpouses(el('#iRelA').value.trim(), el('#iRelB').value.trim()); break;
+        case 'btnParent': linkParentChild(el('#iRelA').value.trim(), el('#iRelB').value.trim(), false); break;
+        case 'btnAdopt': linkParentChild(el('#iRelA').value.trim(), el('#iRelB').value.trim(), true); break;
+        case 'btnExport': {
+          const data = { version:3, exportedAt:new Date().toISOString(), people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId };
+          const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+          const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='genea-tree.json'; a.click(); URL.revokeObjectURL(a.href); break; }
+        case 'btnImport': {
+          const inp = document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
+          inp.onchange = ()=>{ const f = inp.files[0]; if(!f) return; const rd=new FileReader(); rd.onload = ()=>{ try{ const data = JSON.parse(String(rd.result)); if(!data.people) throw new Error('formato non valido'); snapshot(); state.people = data.people; state.spouses = data.spouses||[]; state.adoptions = data.adoptions||[]; state.rootId = data.rootId||Object.keys(state.people)[0]||null; layout(); showToast('Import completato'); } catch(e){ alert('JSON non valido: '+e.message); } }; rd.readAsText(f); };
+          inp.click(); break; }
+        case 'btnReset': if(confirm('Sicuro? Verrà creato un nuovo albero vuoto.')){ snapshot(); state.people={}; state.spouses=[]; state.adoptions=[]; state.rootId=null; state.currentId=null; save(); render(); } break;
+        case 'btnPNG': toPNG(); break;
+        case 'btnPrint': window.print(); break;
+        case 'btnCenter': state.offset={x:120,y:120}; state.zoom=1; render(); break;
+        case 'btnShare': {
+          const data = {people:state.people, spouses:state.spouses, adoptions:state.adoptions, rootId:state.rootId};
+          const enc = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+          const url = location.origin + location.pathname + '#view=' + enc;
+          navigator.clipboard.writeText(url).then(()=>showToast('Link copiato negli appunti (sola lettura)'));
+          break; }
+        case 'btnUndo': undo(); break;
+        case 'btnRedo': redo(); break;
+        case 'btnGedExport': gedExport(); break;
+        case 'btnGedImport': gedImport(); break;
+        case 'btnFE': openInFamilyEcho('popup'); break;
+        case 'btnFESelf': openInFamilyEcho('self'); break;
+        case 'btnFETest': openTestInFamilyEcho('popup'); break;
+        case 'btnSimple': state.simpleMode = !state.simpleMode; el('#simpleState').textContent = state.simpleMode?'ON':'OFF'; render(); save(); break;
+        case 'btnExitView': history.replaceState(null,'', location.pathname); setReadOnlyMode(false); showToast('Modalità modifica attivata'); break;
+      }
+    }catch(err){ console.error(err); showToast('Errore: '+err.message); }
+  }
+
+  document.addEventListener('click', (ev)=>{
+    const b = ev.target.closest('button');
+    if(!b) return;
+    const ids = ['btnAdd','btnClear','btnDelete','btnSetRoot','btnSpouse','btnParent','btnAdopt','btnExport','btnImport','btnReset','btnPNG','btnPrint','btnCenter','btnShare','btnUndo','btnRedo','btnGedExport','btnGedImport','btnFE','btnFESelf','btnFETest','btnSimple','btnExitView'];
+    if(ids.includes(b.id)){
+      ev.preventDefault();
+      __dispatchButton(b.id);
+    }
+  });
+
   window.addEventListener('error', (e)=>{ console.error('JS error:', e.message); showToast('Errore JS: '+ e.message); });
   </script>
 </body>
