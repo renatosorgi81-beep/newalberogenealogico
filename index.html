@@ -9,7 +9,7 @@
       /* Tema chiaro elegante */
       --bg:#ffffff;--panel:#f7f8fb;--ink:#0e1321;--muted:#55607a;
       --accent:#1f6feb;--accent-2:#2da44e;--danger:#d1242f;--grid:#eef2f7;
-      --node:#ffffff;--node-border:#d8dee9;--shadow:rgba(16,24,40,.08);
+      --node:#ffffff;--node-border:#d8dee9;--shadow:rgba(16,24,40,.05);
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -33,10 +33,7 @@
 
     /* Canvas area */
     #stage-wrap{position:relative; overflow:hidden}
-    #stage{position:relative; height:100%; background:
-      linear-gradient(90deg, transparent 49px, var(--grid) 50px, transparent 51px),
-      linear-gradient(transparent 49px, var(--grid) 50px, transparent 51px);
-      background-size:100px 100px;}
+    #stage{position:relative; height:100%; background:#fff;}#viewport{position:absolute; left:0; top:0; transform-origin:0 0;}
     #viewport{position:absolute; left:0; top:0; transform-origin:0 0;}
 
     /* Node cards */
@@ -49,7 +46,7 @@
 
     /* Relationship lines */
     svg{position:absolute; left:0; top:0; pointer-events:none}
-    .edge{stroke:#9aa6c1; stroke-width:2}
+    .edge{stroke:#c5cfdd; stroke-width:2}
     .edge.adopt{stroke-dasharray:6 6}
     .edge.spouse{stroke:#7fbf9f}
 
@@ -158,14 +155,14 @@
     </div>
 
     <div class="section">
-      <h2>Navigazione</h2>
+      <h2>Visualizzazione</h2>
       <div class="toolbar">
-        <button id="zoomOut">−</button>
+        <button id="btnSimple">Modalità semplice: <span id="simpleState">ON</span></button>
+        <button id="btnCenter">Centra</button>
         <span id="zoomLabel" class="badge">100%</span>
-        <button id="zoomIn">＋</button>
-        <button id="btnDragCanvas" class="ghost">Trascina tela: <span id="dragState">OFF</span></button>
-        <button id="btnDragNodes" class="ghost">Drag nodi: <span id="dragNodesState">ON</span></button>
       </div>
+      <p class="small">Modalità semplice = sfondo bianco, nessun drag/zoom, layout molto distanziato.</p>
+    </div>
     </div>
 
     <div class="section">
@@ -199,7 +196,7 @@
     zoom: 1,
     offset: {x: 120, y: 120},
     draggingCanvas: false,
-    dragNodes: true,
+    dragNodes: false,
     currentId: null,
     adoptions: /** @type {[string,string][]} */ ([]), // parent->child adottivo
     history: [],
@@ -235,9 +232,10 @@
 
   // ======= Layout gerarchico "tidy" con centratura coppie e figli =======
   function layout(){
+    const simple = state.simpleMode===undefined ? true : state.simpleMode;
     if(!state.rootId || !state.people[state.rootId]){ render(); save(); return; }
 
-    const dx = 220, dy = 160;
+    const dx = simple? 260 : 220, dy = simple? 190 : 160;
 
     // 1) Costruisci struttura gerarchica a partire dalla radice
     const visited = new Set();
@@ -305,10 +303,13 @@
     edgesSVG.innerHTML='';
     const frag = document.createDocumentFragment();
 
-    function pathCurve(x1,y1,x2,y2, cls='edge'){
+    function pathElbow(x1,y1,x2,y2, cls='edge'){
       const P = document.createElementNS('http://www.w3.org/2000/svg','path');
-      const mx = (y1 + y2)/2; // curva morbida verticale
-      const d = `M ${x1+state.offset.x} ${y1+state.offset.y} C ${x1+state.offset.x} ${mx+state.offset.y}, ${x2+state.offset.x} ${mx+state.offset.y}, ${x2+state.offset.x} ${y2+state.offset.y}`;
+      const midY = (y1 + y2)/2; // gomito ortogonale
+      const d = `M ${x1+state.offset.x} ${y1+state.offset.y} L ${x1+state.offset.x} ${midY+state.offset.y} L ${x2+state.offset.x} ${midY+state.offset.y} L ${x2+state.offset.x} ${y2+state.offset.y}`;
+      P.setAttribute('d', d); P.setAttribute('class', cls); P.setAttribute('fill','none');
+      edgesSVG.appendChild(P);
+    } ${y1+state.offset.y} C ${x1+state.offset.x} ${mx+state.offset.y}, ${x2+state.offset.x} ${mx+state.offset.y}, ${x2+state.offset.x} ${y2+state.offset.y}`;
       P.setAttribute('d', d); P.setAttribute('class', cls); P.setAttribute('fill','none');
       edgesSVG.appendChild(P);
     }
@@ -331,7 +332,7 @@
       for(const c of p.children){
         const child = state.people[c]; if(!child) continue;
         const cls = state.adoptions.find(([pa,ch])=>pa===id && ch===c) ? 'edge adopt' : 'edge';
-        pathCurve(p.x+100, p.y+84, child.x+100, child.y, cls);
+        pathElbow(p.x+100, p.y+84, child.x+100, child.y, cls);
       }
     }
 
@@ -465,18 +466,11 @@
   });
   el('#btnReset').addEventListener('click', ()=>{ if(confirm('Sicuro? Verrà creato un nuovo albero vuoto.')){ snapshot(); state.people={}; state.spouses=[]; state.adoptions=[]; state.rootId=null; state.currentId=null; save(); render(); }});
 
-  // Pan & Zoom
-  function applyZoom(z){ state.zoom = clamp(z, .3, 2.2); el('#zoomLabel').textContent=Math.round(state.zoom*100)+'%'; el('#stage').style.transform=`scale(${state.zoom})`; save(); }
-  el('#zoomIn').addEventListener('click', ()=>applyZoom(state.zoom+0.1));
-  el('#zoomOut').addEventListener('click', ()=>applyZoom(state.zoom-0.1));
-  el('#btnCenter').addEventListener('click', ()=>{ state.offset={x:120,y:120}; applyZoom(1); render(); });
-  el('#btnDragCanvas').addEventListener('click', ()=>{ state.draggingCanvas=!state.draggingCanvas; el('#dragState').textContent = state.draggingCanvas?'ON':'OFF'; });
-  el('#btnDragNodes').addEventListener('click', ()=>{ state.dragNodes=!state.dragNodes; el('#dragNodesState').textContent = state.dragNodes?'ON':'OFF'; });
-
-  let drag=false, dx=0, dy=0;
-  document.addEventListener('mousedown', (e)=>{ if(!state.draggingCanvas) return; drag=true; dx=e.clientX; dy=e.clientY; });
-  document.addEventListener('mousemove', (e)=>{ if(!drag) return; state.offset.x += (e.clientX-dx)/state.zoom; state.offset.y += (e.clientY-dy)/state.zoom; dx=e.clientX; dy=e.clientY; render(); });
-  document.addEventListener('mouseup', ()=> drag=false);
+  // Pan & Zoom (ridotto: disabilitato in modalità semplice)
+  function applyZoom(z){ if(state.simpleMode) return; state.zoom = clamp(z, .5, 2); el('#zoomLabel').textContent=Math.round(state.zoom*100)+'%'; el('#stage').style.transform=`scale(${state.zoom})`; save(); }
+  let drag=false, dxv=0, dyv=0; document.addEventListener('mousedown',(e)=>{ if(state.simpleMode||!state.draggingCanvas) return; drag=true; dxv=e.clientX; dyv=e.clientY;});
+  document.addEventListener('mousemove',(e)=>{ if(!drag) return; state.offset.x += (e.clientX-dxv)/state.zoom; state.offset.y += (e.clientY-dyv)/state.zoom; dxv=e.clientX; dyv=e.clientY; render();});
+  document.addEventListener('mouseup',()=> drag=false);
 
   // PNG export (rasterizza DOM in modo basilare)
   async function toPNG(){
@@ -603,12 +597,16 @@
 
   // ======= Boot =======
   load();
+  if(state.simpleMode===undefined) state.simpleMode=true;
   if(!tryViewFromHash()){
     if(Object.keys(state.people).length===0){
       const a = upsertPerson({name:'Tu', gender:'u', born:'', photo:''});
       state.currentId = a; el('#iRelA').value=a; highlight(a); save();
     } else { render(); }
   }
+
+  // Visualizzazione
+  el('#btnSimple').addEventListener('click', ()=>{ state.simpleMode = !state.simpleMode; el('#simpleState').textContent = state.simpleMode?'ON':'OFF'; render(); save(); });
 
   // Undo/Redo
   el('#btnUndo').addEventListener('click', undo);
